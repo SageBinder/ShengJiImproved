@@ -424,18 +424,21 @@ public class RenderableCardEntity<T extends RenderableCardEntity, CardT extends 
     }
 
     public T setX(float x) {
+        x = Float.isNaN(x) ? 0 : x;
         baseRect.setX(x);
         setDisplayPos();
         return (T)this;
     }
 
     public T setY(float y) {
+        y = Float.isNaN(y) ? 0 : y;
         baseRect.setY(y);
         setDisplayPos();
         return (T)this;
     }
 
     public T setWidth(float width) {
+        width = Float.isNaN(width) ? 0 : width;
         baseRect.setWidth(width);
         baseRect.setHeight(HEIGHT_TO_WIDTH_RATIO * width);
         setDisplaySize();
@@ -443,6 +446,7 @@ public class RenderableCardEntity<T extends RenderableCardEntity, CardT extends 
     }
 
     public T setHeight(float height) {
+        height = Float.isNaN(height) ? 0 : height;
         baseRect.setHeight(height);
         baseRect.setWidth(WIDTH_TO_HEIGHT_RATIO * height);
         setDisplaySize();
@@ -450,6 +454,7 @@ public class RenderableCardEntity<T extends RenderableCardEntity, CardT extends 
     }
 
     public T setRotationDeg(float deg) {
+        deg = Float.isNaN(deg) ? 0 : deg;
         baseRect.setRotationDeg(deg);
         setDisplayRotation();
         return (T)this;
@@ -468,20 +473,24 @@ public class RenderableCardEntity<T extends RenderableCardEntity, CardT extends 
     }
 
     public T setOriginXProportion(float originXProportion) {
+        originXProportion = Float.isNaN(originXProportion) ? 0 : originXProportion;
         baseRect.setOriginXProportion(originXProportion);
         displayRect.setOriginXProportion(originXProportion);
         return (T)this;
     }
 
     public T setOriginYProportion(float originYProportion) {
+        originYProportion = Float.isNaN(originYProportion) ? 0 : originYProportion;
         baseRect.setOriginYProportion(originYProportion);
         displayRect.setOriginYProportion(originYProportion);
         return (T)this;
     }
 
-    public T setOriginProportion(float originProportionX, float originProportionY) {
-        baseRect.setOriginProportion(originProportionX, originProportionY);
-        displayRect.setOriginProportion(originProportionX, originProportionY);
+    public T setOriginProportion(float originXProportion, float originYProportion) {
+        originXProportion = Float.isNaN(originXProportion) ? 0 : originXProportion;
+        originYProportion = Float.isNaN(originYProportion) ? 0 : originYProportion;
+        baseRect.setOriginProportion(originXProportion, originYProportion);
+        displayRect.setOriginProportion(originXProportion, originYProportion);
         return (T)this;
     }
 
@@ -505,24 +514,28 @@ public class RenderableCardEntity<T extends RenderableCardEntity, CardT extends 
     }
 
     public T setDisplayXOffset(float displayXOffset) {
+        displayXOffset = Float.isNaN(displayXOffset) ? 0 : displayXOffset;
         this.displayXOffset = displayXOffset;
         setDisplayPos();
         return (T)this;
     }
 
     public T setDisplayYOffset(float displayYOffset) {
+        displayYOffset = Float.isNaN(displayYOffset) ? 0 : displayYOffset;
         this.displayYOffset = displayYOffset;
         setDisplayPos();
         return (T)this;
     }
 
     public T setDisplayProportion(float displayProportion) {
+        displayProportion = Float.isNaN(displayProportion) ? 0 : displayProportion;
         this.displayProportion = displayProportion;
         setDisplayPos();
         return (T)this;
     }
 
     public T setDisplayRotationOffsetDeg(float displayRotationOffsetDeg) {
+        displayRotationOffsetDeg = Float.isNaN(displayRotationOffsetDeg) ? 0 : displayRotationOffsetDeg;
         this.displayRotationOffsetDeg = displayRotationOffsetDeg;
         setDisplayRotation();
         return (T)this;
@@ -543,12 +556,14 @@ public class RenderableCardEntity<T extends RenderableCardEntity, CardT extends 
     }
 
     public T setDisplayProportionalYOffset(float displayProportionalYOffset) {
+        displayProportionalYOffset = Float.isNaN(displayProportionalYOffset) ? 0 : displayProportionalYOffset;
         this.displayProportionalYOffset = displayProportionalYOffset;
         setDisplayPos();
         return (T)this;
     }
 
     public T setDisplayProportionalXOffset(float displayProportionalXOffset) {
+        displayProportionalXOffset = Float.isNaN(displayProportionalXOffset) ? 0 : displayProportionalXOffset;
         this.displayProportionalXOffset = displayProportionalXOffset;
         setDisplayPos();
         return (T)this;

@@ -5,36 +5,41 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
-import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
-import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.sage.shengji.client.ShengJiGame;
 import com.sage.shengji.client.game.ClientGameState;
 import com.sage.shengji.client.game.RenderablePlayer;
-import com.sage.shengji.client.network.ClientConnection;
-import com.sage.shengji.server.network.ServerCode;
+import com.sage.shengji.client.game.RenderableShengJiCard;
+import com.sage.shengji.utils.card.Rank;
+import com.sage.shengji.utils.card.Suit;
 import com.sage.shengji.utils.renderable.RenderableCardEntity;
 import com.sage.shengji.utils.renderable.RenderableCardGroup;
+import com.sage.shengji.utils.shengji.ShengJiCard;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
-public class GameScreen implements Screen, InputProcessor {
-    private ShengJiGame game;
+public class UiBuilderScreen extends InputAdapter implements Screen {
     private ClientGameState gameState;
-    private ClientConnection client;
+    private ShengJiGame game;
+
+    private ShapeRenderer debugRenderer = new ShapeRenderer();
 
     private SpriteBatch batch = new SpriteBatch();
     private Viewport viewport;
     private float viewportScale = 5f;
     private float textProportion = 1 / 7f;
+    private float originalTextSize = 0;
 
     private Stage uiStage;
     private TextButton actionButton;
@@ -51,28 +56,26 @@ public class GameScreen implements Screen, InputProcessor {
     private BitmapFont collectedPointCardsFont;
     private BitmapFont friendCardsFont;
     private BitmapFont kittyFont;
-
-    private boolean quitConfirmationFlag = false;
-    private Timer quitConfirmationTimer = new Timer();
-    private float quitConfirmationDelay = 3f;
-
-    private float updateDelay = 0;
-    private float delayCounter = 0;
+    private BitmapFont playerNameFont;
 
     private float handHeightProportion = 1f / 7f;
     private float expandedHandHeightProportion = 1f / 5f;
 
-    private float playersCenterXProportion = 0.5f;
+    private float playersCenterXProportion = 0.55f;
     private float playersCenterYProportion = 0.70f;
 
-    private float playersWidthRadiusProportion = 0.35f;
-    private float playersHeightRadiusProportion = 0.22f;
+    private float playersWidthRadiusProportion = 0.36f;
+    private float playersHeightRadiusProportion = 0.19f;
 
-    private boolean mouseControl = true;
+    private boolean renderChoosingFriendCards = false;
+    private boolean renderRoundEndKitty = false;
+    private boolean renderCallKitty = false;
 
-    public GameScreen(ShengJiGame game) {
+    private RenderableCardGroup<RenderableShengJiCard> trumpCardGroup = new RenderableCardGroup<>();
+
+    public UiBuilderScreen(ShengJiGame game) {
         this.game = game;
-        this.gameState = game.getGameState();
+        gameState = new ClientGameState(game);
 
         viewportSetup();
         fontSetup();
@@ -88,6 +91,7 @@ public class GameScreen implements Screen, InputProcessor {
 
     private void fontSetup() {
         int textSize = (int)(Math.max(Gdx.graphics.getHeight(), Gdx.graphics.getWidth()) * textProportion);
+        originalTextSize = textSize;
 
         fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/OpenSans-Regular.ttf"));
 
@@ -102,7 +106,7 @@ public class GameScreen implements Screen, InputProcessor {
         quitConfirmationFont = fontGenerator.generateFont(quitConfirmationFontParameter);
 
         var messageFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        messageFontParameter.size = textSize;
+        messageFontParameter.size = (int)(textSize * 0.8f);
         messageFontParameter.incremental = true;
         messageFont = fontGenerator.generateFont(messageFontParameter);
         messageFont.getData().markupEnabled = true;
@@ -132,6 +136,13 @@ public class GameScreen implements Screen, InputProcessor {
         kittyFontParameter.size = textSize;
         kittyFontParameter.incremental = true;
         kittyFont = fontGenerator.generateFont(kittyFontParameter);
+
+        var playerNameFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        playerNameFontParameter.size = textSize;
+        playerNameFontParameter.incremental = true;
+        playerNameFont = fontGenerator.generateFont(playerNameFontParameter);
+        RenderablePlayer.setNameFont(playerNameFont);
+
     }
 
     private void uiSetup() {
@@ -141,7 +152,7 @@ public class GameScreen implements Screen, InputProcessor {
         actionButtonStyle.font = fontGenerator.generateFont(textButtonFontParameter);
 
         // Creating UI elements:
-        actionButton = new TextButton("", actionButtonStyle);
+        actionButton = new TextButton("Send play", actionButtonStyle);
         actionButton.setProgrammaticChangeEvents(true);
 
         // Adding UI elements to stage:
@@ -158,11 +169,73 @@ public class GameScreen implements Screen, InputProcessor {
 
     @Override
     public void show() {
-        client = game.getClientConnection();
         inputProcessorsSetup();
-        updateUiFromGameState();
+        RenderableCardGroup.debug();
         gameState.thisPlayerHand.prefDivisionProportion = 0.4f;
-        RenderableCardGroup.setDebug(false);
+
+        gameState.players.clear();
+        gameState.players.add(new RenderablePlayer(0, "This player"));
+        gameState.thisPlayer = gameState.players.get(0);
+        for(int i = 1; i < 8; i++) {
+            gameState.players.add(new RenderablePlayer(i, "Player " + i));
+        }
+
+        gameState.players.forEach(p -> {
+            p.clearCards();
+            p.getPlay().addAll(List.of(
+                    new RenderableShengJiCard(Rank.SMALL_JOKER, Suit.JOKER, gameState),
+                    new RenderableShengJiCard(Rank.SMALL_JOKER, Suit.JOKER, gameState),
+                    new RenderableShengJiCard(Rank.BIG_JOKER, Suit.JOKER, gameState),
+                    new RenderableShengJiCard(Rank.BIG_JOKER, Suit.JOKER, gameState)));
+        });
+
+        gameState.players.forEach(p -> p.getPointCards().addAll(List.of(
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState))));
+
+
+        gameState.friendCards.clear();
+        gameState.friendCards.addAll(List.of(
+                new RenderableShengJiCard(Rank.ACE, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.ACE, Suit.CLUBS, gameState),
+                new RenderableShengJiCard(Rank.ACE, Suit.DIAMONDS, gameState)));
+
+        gameState.kitty.clear();
+        gameState.kitty.addAll(List.of(
+                new RenderableShengJiCard(Rank.TWO, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.THREE, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.FOUR, Suit.HEARTS, gameState),
+                new RenderableShengJiCard(Rank.SEVEN, Suit.DIAMONDS, gameState),
+                new RenderableShengJiCard(Rank.BIG_JOKER, Suit.JOKER, gameState),
+                new RenderableShengJiCard(Rank.NINE, Suit.CLUBS, gameState),
+                new RenderableShengJiCard(Rank.ACE, Suit.CLUBS, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.DIAMONDS, gameState)));
+
+        gameState.collectedPointCards.clear();
+        gameState.collectedPointCards.addAll((List.of(
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState))));
+        gameState.collectedPointCards.centerProportion = 0.0f;
+
+        gameState.setTrump(Rank.FIVE, Suit.HEARTS);
+        trumpCardGroup.clear();
+        trumpCardGroup.add(gameState.trumpCard);
+
+        gameState.thisPlayerHand.clear();
+        for(int i = 0; i < 26; i++) {
+            gameState.thisPlayerHand.add(new RenderableShengJiCard(gameState));
+        }
+
+        gameState.message = "This is a message that the server sent";
+        gameState.errorMessage = "[YELLOW]This is an error message oh no!";
     }
 
     @Override
@@ -177,56 +250,36 @@ public class GameScreen implements Screen, InputProcessor {
         ShengJiGame.clearScreen(batch, viewport);
 
         errorFont.draw(batch, gameState.errorMessage,
-                viewport.getWorldWidth() * 0.5f,
-                viewport.getWorldHeight() * 0.45f,
+                viewport.getWorldWidth() * playersCenterXProportion,
+                viewport.getWorldHeight() * playersCenterYProportion - errorFont.getCapHeight() * 3,
                 0, Align.center, false);
         messageFont.draw(batch, gameState.message,
-                viewport.getWorldWidth() * 0.5f,
-                viewport.getWorldHeight() * 0.55f,
+                viewport.getWorldWidth() * playersCenterXProportion,
+                viewport.getWorldHeight() * playersCenterYProportion - errorFont.getCapHeight(),
                 0, Align.center, false);
-        actionButton.setPosition(viewport.getWorldWidth() * 0.9f, viewport.getWorldHeight() * 0.9f, Align.center);
-        actionButton.setWidth(viewport.getWorldWidth() - (gameState.thisPlayerHand.pos.x + gameState.thisPlayerHand.regionWidth));
 
-        ServerCode lastServerCode = gameState.lastServerCode;
-        switch(lastServerCode) {
-        case SEND_FRIEND_CARDS:
-        case INVALID_FRIEND_CARDS:
-            renderFriendCardsForChoosing();
-            break;
+        renderPlayers(viewport.getWorldWidth() * playersCenterXProportion,
+                viewport.getWorldHeight() * playersCenterYProportion,
+                viewport.getWorldWidth() * playersWidthRadiusProportion,
+                viewport.getWorldHeight() * playersHeightRadiusProportion);
 
-        case ROUND_END:
-            renderRoundEndKitty();
-            break;
-
-        case WAIT_FOR_KITTY_CARD:
-        case WAIT_FOR_KITTY_CALL_WINNER:
-        case MAKE_KITTY_CALL:
-        case INVALID_KITTY_CALL:
-        case UNSUCCESSFUL_KITTY_CALL:
-        case SUCCESSFUL_KITTY_CALL:
-        case NO_KITTY_CALL:
+        if(renderCallKitty) {
             renderCallKitty();
-            break;
+        } else if(renderRoundEndKitty) {
+            renderRoundEndKitty();
         }
 
-        if(lastServerCode != ServerCode.ROUND_END) {
-            renderPlayers(viewport.getWorldWidth() * playersCenterXProportion,
-                    viewport.getWorldHeight() * playersCenterYProportion,
-                    viewport.getWorldWidth() * playersWidthRadiusProportion,
-                    viewport.getWorldHeight() * playersHeightRadiusProportion);
-        }
-        if(gameState.trumpCard != null) {
-            renderTrumpCard();
-        }
-        if(lastServerCode != ServerCode.SEND_FRIEND_CARDS
-                && lastServerCode != ServerCode.INVALID_FRIEND_CARDS
-                && !gameState.friendCards.isEmpty()) {
+        if(renderChoosingFriendCards) {
+            renderFriendCardsForChoosing();
+        } else {
             renderFriendCards();
         }
 
-        if(gameState.numPointsNeeded > 0) {
-            renderCollectedPointCards();
-        }
+        renderTrumpCard();
+        renderCollectedPointCards();
+        gameState.thisPlayerHand.leftPaddingProportion = 0.15f;
+        gameState.thisPlayerHand.rightPaddingProportion = 0.15f;
+        gameState.thisPlayerHand.bottomPaddingProportion = 0.09f;
         gameState.thisPlayerHand.render(batch, viewport);
         quitConfirmationFont.draw(batch, quitConfirmationText,
                 viewport.getWorldWidth() / 2,
@@ -234,34 +287,19 @@ public class GameScreen implements Screen, InputProcessor {
                 0, Align.center, false);
         batch.end();
 
+        actionButton.setWidth(viewport.getWorldWidth() * 0.2f);
+        actionButton.setHeight(gameState.thisPlayerHand.pos.y * 0.9f);
+        actionButton.setPosition(
+                viewport.getWorldWidth() / 2,
+                gameState.thisPlayerHand.pos.y / 2,
+                Align.center);
         uiStage.draw();
     }
 
     private void update(float delta) {
-        delayCounter += delta;
-        if(delayCounter >= updateDelay && gameState.update(client)) {
-            updateUiFromGameState();
-            delayCounter = 0;
-        }
-
         handleInputs();
         updateCards(delta);
         uiStage.act(delta);
-    }
-
-    private void renderTrumpCard() {
-        gameState.trumpCard.entity.setHeight(gameState.thisPlayerHand.cardHeight);
-        gameState.trumpCard.setPosition(
-                gameState.thisPlayerHand.pos.x * 0.5f,
-                (viewport.getWorldHeight() * 0.6f) - (gameState.trumpCard.getHeight() * 0.5f));
-        gameState.trumpCard.render(batch, viewport);
-
-        trumpCardFont.setColor(Color.GOLD);
-        trumpCardFont.draw(batch, "Trump\ncard",
-                gameState.trumpCard.getPosition().x + (gameState.trumpCard.getWidth() * 0.5f),
-                gameState.trumpCard.getPosition().y + (trumpCardFont.getXHeight() * 4) + gameState.trumpCard.getHeight(),
-                0, Align.center, false);
-        trumpCardFont.setColor(Color.WHITE);
     }
 
     private void renderCollectedPointCards() {
@@ -269,7 +307,7 @@ public class GameScreen implements Screen, InputProcessor {
         gameState.collectedPointCards.cardHeight = gameState.players.get(0).getPlay().cardHeight * 1.2f;
         gameState.collectedPointCards.setPos(
                 viewport.getWorldWidth() * 0.05f,
-                viewport.getWorldHeight() - gameState.collectedPointCards.cardHeight - (viewport.getWorldWidth() * 0.027f));
+                viewport.getWorldHeight() * 0.8f);
         gameState.collectedPointCards.render(batch, viewport);
 
         collectedPointCardsFont.draw(batch,
@@ -280,7 +318,8 @@ public class GameScreen implements Screen, InputProcessor {
     }
 
     private void renderFriendCardsForChoosing() {
-        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.11f;
+        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.17f;
+        gameState.friendCards.prefDivisionProportion = 1.1f;
 
         gameState.friendCards.regionWidth =
                 (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * gameState.friendCards.cardHeight) * 4;
@@ -294,21 +333,31 @@ public class GameScreen implements Screen, InputProcessor {
     }
 
     private void renderFriendCards() {
-        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.11f;
+        gameState.friendCards.cardHeight = gameState.thisPlayerHand.cardHeight;
+        gameState.friendCards.prefDivisionProportion = 0.2f;
+        gameState.friendCards.regionWidth = viewport.getWorldWidth() - gameState.thisPlayerHand.pos.x - gameState.thisPlayerHand.regionWidth;;
+        gameState.friendCards.setPos(gameState.thisPlayerHand.pos.x + gameState.thisPlayerHand.regionWidth, gameState.thisPlayerHand.pos.y);
 
-        gameState.friendCards.regionWidth =
-                (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * gameState.friendCards.cardHeight) * 4;
-
-        gameState.friendCards.setPos(
-                gameState.friendCards.regionWidth * 0.1f,
-                (viewport.getWorldHeight() * 0.4f) - (gameState.friendCards.cardHeight * 0.75f));
-
-        friendCardsFont.draw(batch, "Friend\ncards",
+        friendCardsFont.draw(batch, "Friend\nCards",
                 gameState.friendCards.pos.x + (gameState.friendCards.regionWidth * 0.5f),
                 gameState.friendCards.pos.y + (friendCardsFont.getXHeight() * 4) + gameState.friendCards.cardHeight,
                 0, Align.center, false);
 
         gameState.friendCards.render(batch, viewport);
+    }
+
+    private void renderTrumpCard() {
+        trumpCardGroup.cardHeight = gameState.thisPlayerHand.cardHeight;
+        trumpCardGroup.regionWidth = gameState.thisPlayerHand.pos.x;
+        trumpCardGroup.setPos(0, gameState.thisPlayerHand.pos.y);
+        trumpCardGroup.render(batch, viewport);
+
+        trumpCardFont.setColor(Color.GOLD);
+        trumpCardFont.draw(batch, "Trump",
+                trumpCardGroup.pos.x + (trumpCardGroup.regionWidth * 0.5f),
+                trumpCardGroup.pos.y + (trumpCardFont.getXHeight() * 2) + trumpCardGroup.cardHeight,
+                0, Align.center, false);
+        trumpCardFont.setColor(Color.WHITE);
     }
 
     private void renderRoundEndKitty() {
@@ -340,7 +389,7 @@ public class GameScreen implements Screen, InputProcessor {
 
         kittyFont.draw(batch, "From Kitty",
                 gameState.kitty.pos.x + (gameState.kitty.regionWidth * 0.5f),
-                gameState.kitty.pos.y + (friendCardsFont.getXHeight() * 4) + gameState.kitty.cardHeight,
+                gameState.kitty.pos.y + (kittyFont.getXHeight() * 4) + gameState.kitty.cardHeight,
                 0, Align.center, false);
 
         gameState.kitty.render(batch, viewport);
@@ -375,10 +424,8 @@ public class GameScreen implements Screen, InputProcessor {
         gameState.players.stream().filter(Objects::nonNull).forEach(p -> p.update(delta));
         gameState.friendCards.update(delta);
         gameState.kitty.update(delta);
+        gameState.trumpCard.update(delta);
         gameState.collectedPointCards.update(delta);
-        if(gameState.trumpCard != null) {
-            gameState.trumpCard.update(delta);
-        }
     }
 
     private void renderPlayers(float centerX, float centerY, float widthRadius, float heightRadius) {
@@ -386,9 +433,15 @@ public class GameScreen implements Screen, InputProcessor {
         float angleIncrement = MathUtils.PI2 / players.size();
         float shift = (players.indexOf(gameState.thisPlayer) * angleIncrement) + (MathUtils.PI * 0.5f);
 
+        Map<Integer, RenderablePlayer> expandedPlayers = new HashMap<>();
+
+
         for(int i = 0; i < players.size(); i++) {
             RenderablePlayer toRender = players.get(i);
             if(toRender == null) {
+                continue;
+            } else if(toRender.isExpanded()) {
+                expandedPlayers.put(i, toRender);
                 continue;
             }
 
@@ -396,126 +449,28 @@ public class GameScreen implements Screen, InputProcessor {
             toRender.setY((MathUtils.sin((i * angleIncrement) - shift) * heightRadius) + centerY);
             toRender.render(batch, viewport);
         }
-    }
 
-    private void updateUiFromGameState() {
-        setActionButtonFromServerCode(gameState.lastServerCode);
-    }
-
-    private void setActionButtonFromServerCode(ServerCode code) {
-        switch(code) {
-        case SUCCESSFUL_KITTY:
-        case SUCCESSFUL_KITTY_CALL:
-        case SUCCESSFUL_FRIEND_CARDS:
-        case WAIT_FOR_KITTY:
-        case WAIT_FOR_FRIEND_CARDS:
-        case WAIT_FOR_KITTY_CARD:
-        case WAIT_FOR_PLAYERS:
-        case WAIT_FOR_KITTY_CALL_WINNER:
-        case WAIT_FOR_CALL_WINNER:
-        case NO_CALL:
-        case NO_ONE_CALLED:
-        case KITTY_EXHAUSTED_REDEAL:
-        case NO_KITTY_CALL:
-        case WAITING_ON_CALLER:
-            disableButton(actionButton);
-            actionButton.setText("");
-            break;
-
-        case SUCCESSFUL_PLAY:
-            disableButton(actionButton);
-            actionButton.setText("");
-            updateDelay = 0.5f;
-            break;
-
-        case MAKE_CALL:
-        case SUCCESSFUL_CALL:
-        case UNSUCCESSFUL_CALL:
-        case INVALID_CALL:
-            enableButton(actionButton, () -> gameState.actions.sendCall(client));
-            actionButton.setText("Send call");
-            break;
-
-        case MAKE_KITTY_CALL:
-        case INVALID_KITTY_CALL:
-        case UNSUCCESSFUL_KITTY_CALL:
-            enableButton(actionButton, () -> gameState.actions.sendKittyCall(client));
-            actionButton.setText("Send call");
-            break;
-
-        case SEND_KITTY:
-        case INVALID_KITTY:
-            enableButton(actionButton, () -> gameState.actions.sendKitty(client));
-            actionButton.setText("Send kitty");
-            break;
-
-        case SEND_FRIEND_CARDS:
-        case INVALID_FRIEND_CARDS:
-            enableButton(actionButton, () -> gameState.actions.sendFriendCards(client));
-            actionButton.setText("Send friend cards");
-            break;
-
-        case MAKE_PLAY:
-        case INVALID_PLAY:
-            enableButton(actionButton, () -> gameState.actions.sendPlay(client));
-            actionButton.setText("Send play");
-
-            if(gameState.thisPlayerHand.size() == 1) {
-                gameState.thisPlayerHand.get(0).setSelected(true);
-                actionButton.toggle();
-            }
-            break;
-
-        case TRICK_END:
-            disableButton(actionButton);
-            updateDelay = 4;
-            break;
-
-        case ROUND_END:
-            enableButton(actionButton, () -> game.showLobbyScreen());
-            actionButton.setText("Exit to lobby");
-            break;
-
-        case TURN_OVER:
-            disableButton(actionButton);
-            actionButton.setText("");
-            updateDelay = 2;
-            break;
-
-        case ROUND_START:
-            // --- FALL THROUGH ---
-        case TRICK_START:
-        case WAIT_FOR_TURN_PLAYER:
-        case WAIT_FOR_HAND:
-        case WAIT_FOR_NEW_PLAY:
-            disableButton(actionButton);
-            actionButton.setText("");
-            // --- FALL THROUGH ---
-        default:
-            updateDelay = 0;
+        for(var i : expandedPlayers.keySet()) {
+            RenderablePlayer toRender = expandedPlayers.get(i);
+            float playerX = (MathUtils.cos((i * angleIncrement) - shift) * widthRadius) + centerX;
+            float playerY = (MathUtils.sin((i * angleIncrement) - shift) * heightRadius) + centerY;
+            toRender.setX(playerX);
+            toRender.setY(playerY);
+            toRender.render(batch, viewport);
         }
-    }
 
-    private static void enableButton(TextButton button, ButtonAction action) {
-        while(button.getListeners().size > 1) {
-            button.getListeners().removeIndex(button.getListeners().size - 1);
-        }
-        button.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                action.onAction();
-            }
-        });
-        button.setDisabled(false);
-        button.setVisible(true);
-    }
+        if(RenderableCardGroup.isInDebugMode()) {
+            batch.end();
+            debugRenderer.begin(ShapeRenderer.ShapeType.Line);
 
-    private void disableButton(TextButton button) {
-        while(button.getListeners().size > 1) {
-            button.getListeners().removeIndex(button.getListeners().size - 1);
+            debugRenderer.setProjectionMatrix(viewport.getCamera().combined);
+            debugRenderer.setColor(Color.GREEN);
+
+            gameState.players.forEach(p -> debugRenderer.line(centerX, centerY, p.getX(), p.getY()));
+
+            debugRenderer.end();
+            batch.begin();
         }
-        button.setDisabled(true);
-        button.setVisible(false);
     }
 
     @Override
@@ -552,22 +507,7 @@ public class GameScreen implements Screen, InputProcessor {
             break;
 
         case Input.Keys.ESCAPE:
-            if(!quitConfirmationFlag) {
-                quitConfirmationText = "Press ESC again to leave the game";
-                quitConfirmationFlag = true;
-                quitConfirmationTimer.scheduleTask(new Timer.Task() {
-                    @Override
-                    public void run() {
-                        quitConfirmationText = "";
-                        quitConfirmationFlag = false;
-                    }
-                }, quitConfirmationDelay);
-            } else {
-                client.quit();
-                game.closeGameServer();
-                gameState.message = "You left the game";
-                game.showStartScreen();
-            }
+            game.showStartScreen();
             break;
 
         case Input.Keys.LEFT:
@@ -591,13 +531,28 @@ public class GameScreen implements Screen, InputProcessor {
                 gameState.thisPlayerHand.get(keycode == Input.Keys.RIGHT ? 0 : gameState.thisPlayerHand.size() - 1)
                         .entity.setHighlightable(true).setHighlighted(true);
             }
-            mouseControl = false;
             break;
 
         case Input.Keys.SPACE:
             gameState.thisPlayerHand.stream()
                     .filter(c -> c.entity.isHighlighted())
                     .findAny().ifPresent(c -> c.entity.toggleSelected());
+            break;
+
+        case Input.Keys.Q:
+            renderRoundEndKitty = !renderRoundEndKitty;
+            break;
+
+        case Input.Keys.W:
+            renderCallKitty = !renderCallKitty;
+            break;
+
+        case Input.Keys.E:
+            renderChoosingFriendCards = !renderChoosingFriendCards;
+            break;
+
+        case Input.Keys.D:
+            RenderableCardGroup.setDebug(!RenderableCardGroup.isInDebugMode());
             break;
         }
 
@@ -611,14 +566,8 @@ public class GameScreen implements Screen, InputProcessor {
             actionButton.toggle();
             // --- FALL THROUGH ---
         case Input.Keys.SPACE:
-            updateDelay = 0;
             break;
         }
-        return false;
-    }
-
-    @Override
-    public boolean keyTyped(char character) {
         return false;
     }
 
@@ -626,7 +575,6 @@ public class GameScreen implements Screen, InputProcessor {
     public boolean touchDown(int screenX, int screenY, int pointer, int button) {
         var clickPos = viewport.unproject(new Vector2(screenX, screenY));
         if(button == Input.Buttons.LEFT) {
-            mouseControl = true;
             gameState.thisPlayerHand.forEach(c -> c.entity.setHighlighted(false));
 
             for(var i = gameState.thisPlayerHand.reverseListIterator(); i.hasPrevious(); ) {
@@ -641,46 +589,23 @@ public class GameScreen implements Screen, InputProcessor {
         return false;
     }
 
-    @Override
-    public boolean touchUp(int screenX, int screenY, int pointer, int button) {
-        return false;
-    }
-
-    @Override
-    public boolean touchDragged(int screenX, int screenY, int pointer) {
-        return false;
-    }
 
     @Override
     public boolean mouseMoved(int screenX, int screenY) {
-        if(mouseControl) {
-            var newMousePos = viewport.unproject(new Vector2(screenX, screenY));
+        var newMousePos = viewport.unproject(new Vector2(screenX, screenY));
 
-            gameState.thisPlayerHand.forEach(c -> {
-                c.entity.setHighlightable(true);
-                c.entity.setHighlighted(false);
-            });
-            for(var i = gameState.thisPlayerHand.reverseListIterator(); i.hasPrevious(); ) {
-                var entity = i.previous().entity;
-                if(entity.displayRectContainsPoint(newMousePos) || entity.baseRectContainsPoint(newMousePos)) {
-                    if(!entity.isSelected()) {
-                        entity.setHighlighted(true);
-                        break;
-                    } else if(entity.displayRectContainsPoint(newMousePos)) {
-                        break;
-                    }
-                }
+        gameState.thisPlayerHand.forEach(c -> {
+            c.entity.setHighlightable(true);
+            c.entity.setHighlighted(false);
+        });
+        for(var i = gameState.thisPlayerHand.reverseListIterator(); i.hasPrevious(); ) {
+            var entity = i.previous().entity;
+            if(entity.displayRectContainsPoint(newMousePos)
+                    || (!entity.isSelected() && entity.baseRectContainsPoint(newMousePos))) {
+                entity.setHighlighted(true);
+                break;
             }
         }
         return false;
-    }
-
-    @Override
-    public boolean scrolled(int amount) {
-        return false;
-    }
-
-    private interface ButtonAction {
-        void onAction();
     }
 }

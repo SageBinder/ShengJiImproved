@@ -85,6 +85,15 @@ public class CardList<T extends Card> extends ArrayList<T> {
         return false;
     }
 
+    public boolean containsAnyByValue(CardList<T> cards) {
+        for(T c : cards) {
+            if(containsValue(c)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean containsAnySuit(Suit suit) {
         for(T c : this) {
             if(c.getSuit() == suit) {

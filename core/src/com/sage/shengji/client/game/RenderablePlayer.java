@@ -5,7 +5,6 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.Viewport;
@@ -19,7 +18,6 @@ import com.sage.shengji.utils.shengji.Team;
 import net.dermetfan.gdx.math.MathUtils;
 
 import java.util.Arrays;
-import java.util.Optional;
 
 public class RenderablePlayer implements Renderable {
     private static BitmapFont nameFont;
@@ -39,6 +37,8 @@ public class RenderablePlayer implements Renderable {
     private final RenderableCardGroup<RenderableShengJiCard> play = new RenderableCardGroup<>();
 
     private Vector2 pos = new Vector2();
+    private float heightProportion = 0.11f;
+    private float expandedHeightProportion = 0.22f;
 
     private int playerNum;
     private boolean isHost = false;
@@ -59,30 +59,25 @@ public class RenderablePlayer implements Renderable {
                 pos.x, pos.y + (nameFont.getXHeight() * 2),
                 0, Align.center, false);
 
-        float playTargetHeight = viewport.getWorldHeight() * 0.11f;
+        float playTargetHeight = viewport.getWorldHeight() * ((isExpanded) ? expandedHeightProportion : heightProportion);
         float playTargetY = pos.y - playTargetHeight;
-        if(isExpanded) {
-            playTargetHeight *= 2;
-        }
-        float playTargetWidth = ((play.prefDivisionProportion * 6) + (1)) * playTargetHeight * RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO;;
+        float playTargetWidth = ((play.prefDivisionProportion * 4) * playTargetHeight * RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO);
         float playTargetX = pos.x - (playTargetWidth * 0.5f);
 
         play.cardHeight = playTargetHeight;
         play.regionWidth = playTargetWidth;
-        play.pos.y = playTargetY;
-        play.pos.x = playTargetX;
-        play.prefDivisionProportion = 1.1f;
+        play.pos.x = MathUtils.clamp(playTargetX, 0, viewport.getWorldWidth() - play.regionWidth);
+        play.pos.y = MathUtils.clamp(playTargetY, 0, viewport.getWorldHeight() - play.cardHeight);
+        play.prefDivisionProportion = 0.9f;
 
         pointCards.cardHeight = playTargetHeight * 0.66f;
-        pointCards.regionWidth = (isExpanded)
-                ? MathUtils.max(new float[]{playTargetWidth * pointCards.size(), 1.1f * playTargetWidth})
-                : 1.1f * playTargetWidth;
-        pointCards.regionWidth = MathUtils.clamp(pointCards.regionWidth, 0, viewport.getWorldWidth());
-        pointCards.pos.x = (playTargetX + (playTargetWidth * 0.5f)) - (pointCards.regionWidth * 0.5f);
-        pointCards.pos.x = MathUtils.clamp(pointCards.pos.x,
+        pointCards.regionWidth = MathUtils.clamp(playTargetWidth, 0, viewport.getWorldWidth());
+        pointCards.pos.x = MathUtils.clamp((playTargetX + (playTargetWidth * 0.5f)) - (pointCards.regionWidth * 0.5f),
                 0,
                 viewport.getWorldWidth() - pointCards.regionWidth);
-        pointCards.pos.y = playTargetY - (pointCards.cardHeight * 1.05f);
+        pointCards.pos.y = MathUtils.clamp(playTargetY - (pointCards.cardHeight * 1.05f),
+                0,
+                viewport.getWorldHeight() - pointCards.cardHeight);
         pointCards.prefDivisionProportion = 1.1f;
 
         pointCards.forEach(c -> {
@@ -100,6 +95,11 @@ public class RenderablePlayer implements Renderable {
     public void update(float delta) {
         play.update(delta);
         pointCards.update(delta);
+    }
+
+    public static void setNameFont(BitmapFont font) {
+        nameFont.dispose();
+        nameFont = font;
     }
 
     public void setNameColor(Color nameColor) {

@@ -9,7 +9,7 @@ import com.sage.shengji.utils.card.Suit;
 
 import java.util.Collection;
 
-public class RenderableCardList<T extends Card & RenderableCard> extends CardList<T> {
+public class RenderableCardList<T extends Card & RenderableCard> extends CardList<T> implements Renderable {
     public RenderableCardList() {
         super();
     }
@@ -22,6 +22,7 @@ public class RenderableCardList<T extends Card & RenderableCard> extends CardLis
         forEach(c -> c.update(delta));
     }
 
+    @Override
     public void render(SpriteBatch batch, Viewport viewport) {
         render(batch, viewport, false);
     }

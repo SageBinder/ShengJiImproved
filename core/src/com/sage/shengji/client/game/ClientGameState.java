@@ -829,7 +829,7 @@ public class ClientGameState extends ShengJiGameState {
         }
     }
 
-    private void setTrump(Rank rank, Suit suit) {
+    public void setTrump(Rank rank, Suit suit) {
         trumpRank = rank;
         trumpSuit = suit;
         if(trumpRank != null && trumpSuit != null) {

@@ -15,6 +15,8 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.sage.shengji.client.ShengJiGame;
 import com.sage.shengji.client.game.ClientGameState;
+import com.sage.shengji.utils.renderable.RenderableCardGroup;
+import com.sage.shengji.utils.renderable.RenderableCardList;
 
 public class StartScreen implements Screen, InputProcessor {
     private ShengJiGame game;
@@ -138,6 +140,7 @@ public class StartScreen implements Screen, InputProcessor {
     @Override
     public void show() {
         gameState.clean();
+        RenderableCardGroup.setDebug(false);
         inputProcessorsSetup();
     }
 
@@ -183,6 +186,8 @@ public class StartScreen implements Screen, InputProcessor {
     public boolean keyDown(int keycode) {
         if(keycode == Input.Keys.P) {
             game.showPlaygroundScreen();
+        } else if(keycode == Input.Keys.U) {
+            game.showUiBuilderScreen();
         }
         return false;
     }

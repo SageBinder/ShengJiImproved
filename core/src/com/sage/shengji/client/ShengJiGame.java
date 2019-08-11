@@ -34,13 +34,14 @@ public class ShengJiGame extends Game {
             joinGameScreen,
             lobbyScreen,
             gameScreen,
-            playgroundScreen;
+            playgroundScreen,
+            uiBuilderScreen;
 
     private Timer titleTimer;
 
     @Override
     public void create() {
-        Gdx.graphics.setTitle("♤♥♧♦");
+        Gdx.graphics.setTitle("♤♥升級♧♦");
 
         backgroundTexture = new Texture(Gdx.files.internal("background.jpg"));
 
@@ -51,6 +52,8 @@ public class ShengJiGame extends Game {
         lobbyScreen = new LobbyScreen(this);
         gameScreen = new GameScreen(this);
         playgroundScreen = new PlaygroundScreen(this);
+        uiBuilderScreen = new UiBuilderScreen(this);
+
         setScreen(startScreen);
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::closeGameServer));
@@ -80,6 +83,10 @@ public class ShengJiGame extends Game {
 
     public void showPlaygroundScreen() {
         setScreen(playgroundScreen);
+    }
+
+    public void showUiBuilderScreen() {
+        setScreen(uiBuilderScreen);
     }
 
     public Texture getFeltBackgroundTexture() {

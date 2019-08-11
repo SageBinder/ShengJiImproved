@@ -14,13 +14,14 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
     public final Vector2 pos = new Vector2();
 
     public boolean useCardMover = true;
-    public float cardHeight = Gdx.graphics.getHeight() / 15f,
-            regionWidth = Gdx.graphics.getWidth() / 10f,
-            prefDivisionProportion = 0.2f,
-            rotationRad = 0.0f;
+    public float cardHeight = Gdx.graphics.getHeight() / 15f;
+    public float regionWidth = Gdx.graphics.getWidth() / 10f;
+    public float prefDivisionProportion = 0.2f;
+    public float rotationRad = 0.0f;
+    public float centerProportion = 0.5f;
 
     private ShapeRenderer debugRenderer = new ShapeRenderer();
-    private boolean inDebugMode = false;
+    private static boolean inDebugMode = false;
 
 
     public RenderableCardGroup() {
@@ -41,9 +42,9 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
         float cardPositionRegionWidth = regionWidth - (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * cardHeight);
         float division = Math.min(RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * cardHeight * prefDivisionProportion,
                 cardPositionRegionWidth / (size() - 1));
-        float offset = MathUtils.clamp((cardPositionRegionWidth * 0.5f) - (0.5f * division * (size() - 1)),
+        float offset = MathUtils.clamp((cardPositionRegionWidth * centerProportion) - (centerProportion * division * (size() - 1)),
                 0,
-                cardPositionRegionWidth * 0.5f);
+                cardPositionRegionWidth * centerProportion);
 
         boolean wrapped;
         if(wrapped = rotationRad > MathUtils.PI2) {
@@ -87,12 +88,16 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
         pos.y = y;
     }
 
-    public void debug() {
+    public static void debug() {
         inDebugMode = true;
     }
 
-    public void setDebug(boolean debug) {
-        this.inDebugMode = debug;
+    public static void setDebug(boolean debug) {
+        inDebugMode = debug;
+    }
+
+    public static boolean isInDebugMode() {
+        return inDebugMode;
     }
 
     private void renderDebugLines(Viewport viewport) {
@@ -103,8 +108,8 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
         debugRenderer.rect(pos.x, pos.y, regionWidth, cardHeight);
 
         debugRenderer.setColor(1.0f, 0.0f, 0.0f, 1.0f);
-        debugRenderer.line(pos.x + (regionWidth * 0.5f), pos.y + (cardHeight * 1.5f),
-                pos.x + (regionWidth * 0.5f), pos.y - (cardHeight * 0.5f));
+        debugRenderer.line(pos.x + (regionWidth * centerProportion), pos.y + (cardHeight * 1.5f),
+                pos.x + (regionWidth * centerProportion), pos.y - (cardHeight * 0.5f));
 
         debugRenderer.line(viewport.getWorldWidth() / 2, 0, viewport.getWorldWidth() / 2, viewport.getWorldHeight());
         debugRenderer.line(0, viewport.getWorldHeight() / 2, viewport.getWorldWidth(), viewport.getWorldHeight() / 2);
