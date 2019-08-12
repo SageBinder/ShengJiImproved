@@ -28,7 +28,7 @@ public class ClientGameState extends ShengJiGameState {
     public static final Color basePlayColor = Color.LIGHT_GRAY;
     public static final Color turnPlayerNameColor = Color.LIGHT_GRAY;
 
-    public static final Color invalidatedFriendCardBackgroundColor = new Color(Color.DARK_GRAY);
+    public static final Color invalidatedFriendCardBackgroundColor = new Color(Color.LIGHT_GRAY);
     public static final Color invalidatedFriendCardBorderColor = new Color(Color.RED);
 
     public static final Color keepersNameColor = new Color(Color.GREEN);
@@ -478,7 +478,7 @@ public class ClientGameState extends ShengJiGameState {
                     ));
             Card callCard = new Card((Integer)data.get("callcardnum"));
 
-            setTrump(callCard.getRank(), callCard.getSuit());
+            setTrump(callWinner.getCallRank(), callCard.getSuit());
             callWinner.setTeam(Team.KEEPERS);
             callWinner.setNameColor(getTeamNameColor(Team.KEEPERS));
 
@@ -646,6 +646,7 @@ public class ClientGameState extends ShengJiGameState {
                 p.setNameColor(getTeamNameColor(team));
                 if(team == Team.COLLECTORS) {
                     collectedPointCards.addAll(p.getPointCards());
+                    numCollectedPoints = collectedPointCards.stream().mapToInt(ShengJiCard::getPoints).sum();
                     p.getPointCards().clear();
                 } else if(team == Team.KEEPERS) {
                     p.getPointCards().clear();
@@ -714,12 +715,13 @@ public class ClientGameState extends ShengJiGameState {
                     trickWinner.getPointCards().sort(ShengJiCard::compareTo);
                 } else if(trickWinner.getTeam() == Team.COLLECTORS) {
                     collectedPointCards.addAll(pointCardsInTrick);
+                    numCollectedPoints = collectedPointCards.stream().mapToInt(ShengJiCard::getPoints).sum();
                     collectedPointCards.sort(ShengJiCard::compareTo);
                 }
 
             }
 
-            message = trickWinner.getName() + " won the trick.\nCollects "
+            message = trickWinner.getName() + " won the trick. Collects "
                     + pointCardsInTrick.stream().mapToInt(ShengJiCard::getPoints).sum()
                     + " points";
 
@@ -773,6 +775,8 @@ public class ClientGameState extends ShengJiGameState {
                     )))
                     .collect(Collectors.toCollection(ArrayList::new));
             int kittyPoints = kittyCards.stream().mapToInt(ShengJiCard::getPoints).sum();
+
+            numCollectedPoints = totalCollectedPoints;
 
             kitty.clear();
             kitty.addAll(kittyCards);
@@ -883,7 +887,11 @@ public class ClientGameState extends ShengJiGameState {
         }
 
         public void sendKittyCall(ClientConnection client) {
-
+            try {
+                client.sendCode(ClientCode.KITTY_CALL);
+            } catch(IOException e) {
+                errorMessage = "[Yellow]There was an error while trying to contact the server. Did you lose connection?[]";
+            }
         }
 
         public void sendKitty(ClientConnection client) {

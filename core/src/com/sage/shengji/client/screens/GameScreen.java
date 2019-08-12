@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
@@ -19,17 +20,23 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import com.sage.shengji.client.ShengJiGame;
 import com.sage.shengji.client.game.ClientGameState;
 import com.sage.shengji.client.game.RenderablePlayer;
+import com.sage.shengji.client.game.RenderableShengJiCard;
 import com.sage.shengji.client.network.ClientConnection;
 import com.sage.shengji.server.network.ServerCode;
+import com.sage.shengji.utils.card.Card;
 import com.sage.shengji.utils.renderable.RenderableCardEntity;
 import com.sage.shengji.utils.renderable.RenderableCardGroup;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public class GameScreen implements Screen, InputProcessor {
     private ShengJiGame game;
     private ClientGameState gameState;
     private ClientConnection client;
+
+    private static ShapeRenderer debugRenderer = new ShapeRenderer();
 
     private SpriteBatch batch = new SpriteBatch();
     private Viewport viewport;
@@ -51,6 +58,7 @@ public class GameScreen implements Screen, InputProcessor {
     private BitmapFont collectedPointCardsFont;
     private BitmapFont friendCardsFont;
     private BitmapFont kittyFont;
+    private BitmapFont playerNameFont;
 
     private boolean quitConfirmationFlag = false;
     private Timer quitConfirmationTimer = new Timer();
@@ -62,13 +70,15 @@ public class GameScreen implements Screen, InputProcessor {
     private float handHeightProportion = 1f / 7f;
     private float expandedHandHeightProportion = 1f / 5f;
 
-    private float playersCenterXProportion = 0.5f;
+    private float playersCenterXProportion = 0.50f;
     private float playersCenterYProportion = 0.70f;
 
-    private float playersWidthRadiusProportion = 0.35f;
-    private float playersHeightRadiusProportion = 0.22f;
+    private float playersWidthRadiusProportion = 0.40f;
+    private float playersHeightRadiusProportion = 0.19f;
 
     private boolean mouseControl = true;
+
+    private RenderableCardGroup<RenderableShengJiCard> trumpCardGroup = new RenderableCardGroup();
 
     public GameScreen(ShengJiGame game) {
         this.game = game;
@@ -102,29 +112,29 @@ public class GameScreen implements Screen, InputProcessor {
         quitConfirmationFont = fontGenerator.generateFont(quitConfirmationFontParameter);
 
         var messageFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        messageFontParameter.size = textSize;
+        messageFontParameter.size = (int)(textSize * 0.8f);
         messageFontParameter.incremental = true;
         messageFont = fontGenerator.generateFont(messageFontParameter);
         messageFont.getData().markupEnabled = true;
 
         var errorFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        errorFontParameter.size = textSize;
+        errorFontParameter.size = (int)(textSize * 0.8f);
         errorFontParameter.incremental = true;
         errorFont = fontGenerator.generateFont(errorFontParameter);
         errorFont.getData().markupEnabled = true;
 
         var trumpCardFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        trumpCardFontParameter.size = textSize;
+        trumpCardFontParameter.size = (int)(textSize * 0.85f);
         trumpCardFontParameter.incremental = true;
         trumpCardFont = fontGenerator.generateFont(trumpCardFontParameter);
 
         var collectedPointCardsFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        collectedPointCardsFontParameter.size = textSize;
+        collectedPointCardsFontParameter.size = (int)(textSize * 0.6f);
         collectedPointCardsFontParameter.incremental = true;
         collectedPointCardsFont = fontGenerator.generateFont(collectedPointCardsFontParameter);
 
         var friendCardsFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        friendCardsFontParameter.size = textSize;
+        friendCardsFontParameter.size = (int)(textSize * 0.85f);
         friendCardsFontParameter.incremental = true;
         friendCardsFont = fontGenerator.generateFont(friendCardsFontParameter);
 
@@ -132,6 +142,13 @@ public class GameScreen implements Screen, InputProcessor {
         kittyFontParameter.size = textSize;
         kittyFontParameter.incremental = true;
         kittyFont = fontGenerator.generateFont(kittyFontParameter);
+
+        var playerNameFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        playerNameFontParameter.size = textSize;
+        playerNameFontParameter.incremental = true;
+        playerNameFont = fontGenerator.generateFont(playerNameFontParameter);
+        playerNameFont.getData().markupEnabled = true;
+        RenderablePlayer.setNameFont(playerNameFont);
     }
 
     private void uiSetup() {
@@ -161,7 +178,14 @@ public class GameScreen implements Screen, InputProcessor {
         client = game.getClientConnection();
         inputProcessorsSetup();
         updateUiFromGameState();
+
         gameState.thisPlayerHand.prefDivisionProportion = 0.4f;
+        gameState.thisPlayerHand.leftPaddingProportion = 0.15f;
+        gameState.thisPlayerHand.rightPaddingProportion = 0.15f;
+        gameState.thisPlayerHand.bottomPaddingProportion = 0.09f;
+
+        trumpCardGroup.clear();
+
         RenderableCardGroup.setDebug(false);
     }
 
@@ -177,15 +201,14 @@ public class GameScreen implements Screen, InputProcessor {
         ShengJiGame.clearScreen(batch, viewport);
 
         errorFont.draw(batch, gameState.errorMessage,
-                viewport.getWorldWidth() * 0.5f,
-                viewport.getWorldHeight() * 0.45f,
+                viewport.getWorldWidth() * playersCenterXProportion,
+                gameState.thisPlayerHand.pos.y + (viewport.getWorldHeight() * handHeightProportion) + errorFont.getLineHeight(),
+//                viewport.getWorldHeight() * playersCenterYProportion - errorFont.getCapHeight(),
                 0, Align.center, false);
         messageFont.draw(batch, gameState.message,
-                viewport.getWorldWidth() * 0.5f,
-                viewport.getWorldHeight() * 0.55f,
+                viewport.getWorldWidth() * playersCenterXProportion,
+                viewport.getWorldHeight() - errorFont.getCapHeight(),
                 0, Align.center, false);
-        actionButton.setPosition(viewport.getWorldWidth() * 0.9f, viewport.getWorldHeight() * 0.9f, Align.center);
-        actionButton.setWidth(viewport.getWorldWidth() - (gameState.thisPlayerHand.pos.x + gameState.thisPlayerHand.regionWidth));
 
         ServerCode lastServerCode = gameState.lastServerCode;
         switch(lastServerCode) {
@@ -234,6 +257,12 @@ public class GameScreen implements Screen, InputProcessor {
                 0, Align.center, false);
         batch.end();
 
+        actionButton.setWidth(viewport.getWorldWidth() * 0.2f);
+        actionButton.setHeight(gameState.thisPlayerHand.pos.y * 0.9f);
+        actionButton.setPosition(
+                viewport.getWorldWidth() / 2,
+                gameState.thisPlayerHand.pos.y / 2,
+                Align.center);
         uiStage.draw();
     }
 
@@ -250,37 +279,37 @@ public class GameScreen implements Screen, InputProcessor {
     }
 
     private void renderTrumpCard() {
-        gameState.trumpCard.entity.setHeight(gameState.thisPlayerHand.cardHeight);
-        gameState.trumpCard.setPosition(
-                gameState.thisPlayerHand.pos.x * 0.5f,
-                (viewport.getWorldHeight() * 0.6f) - (gameState.trumpCard.getHeight() * 0.5f));
-        gameState.trumpCard.render(batch, viewport);
+        trumpCardGroup.cardHeight = gameState.thisPlayerHand.cardHeight;
+        trumpCardGroup.regionWidth = gameState.thisPlayerHand.pos.x;
+        trumpCardGroup.setPos(0, gameState.thisPlayerHand.pos.y);
+        trumpCardGroup.render(batch, viewport);
 
         trumpCardFont.setColor(Color.GOLD);
-        trumpCardFont.draw(batch, "Trump\ncard",
-                gameState.trumpCard.getPosition().x + (gameState.trumpCard.getWidth() * 0.5f),
-                gameState.trumpCard.getPosition().y + (trumpCardFont.getXHeight() * 4) + gameState.trumpCard.getHeight(),
+        trumpCardFont.draw(batch, "Trump",
+                trumpCardGroup.pos.x + (trumpCardGroup.regionWidth * 0.5f),
+                trumpCardGroup.pos.y + (trumpCardFont.getXHeight() * 2) + trumpCardGroup.cardHeight,
                 0, Align.center, false);
         trumpCardFont.setColor(Color.WHITE);
     }
 
     private void renderCollectedPointCards() {
-        gameState.collectedPointCards.regionWidth = gameState.players.get(0).getPlay().regionWidth * 1.5f;
-        gameState.collectedPointCards.cardHeight = gameState.players.get(0).getPlay().cardHeight * 1.2f;
+        gameState.collectedPointCards.regionWidth = viewport.getWorldWidth() / 8f;
+        gameState.collectedPointCards.cardHeight = viewport.getWorldHeight() / 10f;
         gameState.collectedPointCards.setPos(
-                viewport.getWorldWidth() * 0.05f,
-                viewport.getWorldHeight() - gameState.collectedPointCards.cardHeight - (viewport.getWorldWidth() * 0.027f));
+                gameState.collectedPointCards.regionWidth * 0.1f,
+                viewport.getWorldHeight() - gameState.collectedPointCards.cardHeight - (gameState.collectedPointCards.regionWidth * 0.1f));
         gameState.collectedPointCards.render(batch, viewport);
 
         collectedPointCardsFont.draw(batch,
                 gameState.numCollectedPoints + "/" + gameState.numPointsNeeded + " points",
                 gameState.collectedPointCards.pos.x + (gameState.collectedPointCards.regionWidth * 0.5f),
-                gameState.collectedPointCards.pos.y - (collectedPointCardsFont.getXHeight() * 2),
+                viewport.getWorldHeight() - collectedPointCardsFont.getXHeight() * 0.25f,
                 0, Align.center, false);
     }
 
     private void renderFriendCardsForChoosing() {
-        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.11f;
+        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.17f;
+        gameState.friendCards.prefDivisionProportion = 1.1f;
 
         gameState.friendCards.regionWidth =
                 (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * gameState.friendCards.cardHeight) * 4;
@@ -294,16 +323,12 @@ public class GameScreen implements Screen, InputProcessor {
     }
 
     private void renderFriendCards() {
-        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.11f;
+        gameState.friendCards.cardHeight = gameState.thisPlayerHand.cardHeight;
+        gameState.friendCards.prefDivisionProportion = 0.2f;
+        gameState.friendCards.regionWidth = viewport.getWorldWidth() - gameState.thisPlayerHand.pos.x - gameState.thisPlayerHand.regionWidth;;
+        gameState.friendCards.setPos(gameState.thisPlayerHand.pos.x + gameState.thisPlayerHand.regionWidth, gameState.thisPlayerHand.pos.y);
 
-        gameState.friendCards.regionWidth =
-                (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * gameState.friendCards.cardHeight) * 4;
-
-        gameState.friendCards.setPos(
-                gameState.friendCards.regionWidth * 0.1f,
-                (viewport.getWorldHeight() * 0.4f) - (gameState.friendCards.cardHeight * 0.75f));
-
-        friendCardsFont.draw(batch, "Friend\ncards",
+        friendCardsFont.draw(batch, "Friend\nCards",
                 gameState.friendCards.pos.x + (gameState.friendCards.regionWidth * 0.5f),
                 gameState.friendCards.pos.y + (friendCardsFont.getXHeight() * 4) + gameState.friendCards.cardHeight,
                 0, Align.center, false);
@@ -340,7 +365,7 @@ public class GameScreen implements Screen, InputProcessor {
 
         kittyFont.draw(batch, "From Kitty",
                 gameState.kitty.pos.x + (gameState.kitty.regionWidth * 0.5f),
-                gameState.kitty.pos.y + (friendCardsFont.getXHeight() * 4) + gameState.kitty.cardHeight,
+                gameState.kitty.pos.y + (kittyFont.getXHeight() * 4) + gameState.kitty.cardHeight,
                 0, Align.center, false);
 
         gameState.kitty.render(batch, viewport);
@@ -370,21 +395,28 @@ public class GameScreen implements Screen, InputProcessor {
     }
 
     private void updateCards(float delta) {
+        if(gameState.trumpCard == null && !trumpCardGroup.isEmpty()) {
+            trumpCardGroup.clear();
+        } else if(gameState.trumpCard != null && (trumpCardGroup.isEmpty() || !trumpCardGroup.get(0).isSameAs(gameState.trumpCard))) {
+            trumpCardGroup.clear();
+            trumpCardGroup.add(gameState.trumpCard);
+        }
+
         gameState.thisPlayerHand.forEach(c -> c.entity.mover.posSpeed = 6);
         gameState.thisPlayerHand.update(delta);
         gameState.players.stream().filter(Objects::nonNull).forEach(p -> p.update(delta));
         gameState.friendCards.update(delta);
         gameState.kitty.update(delta);
         gameState.collectedPointCards.update(delta);
-        if(gameState.trumpCard != null) {
-            gameState.trumpCard.update(delta);
-        }
+        trumpCardGroup.update(delta);
     }
 
     private void renderPlayers(float centerX, float centerY, float widthRadius, float heightRadius) {
         var players = gameState.players;
         float angleIncrement = MathUtils.PI2 / players.size();
         float shift = (players.indexOf(gameState.thisPlayer) * angleIncrement) + (MathUtils.PI * 0.5f);
+
+        List<RenderablePlayer> expandedPlayers = new ArrayList<>();
 
         for(int i = 0; i < players.size(); i++) {
             RenderablePlayer toRender = players.get(i);
@@ -394,7 +426,27 @@ public class GameScreen implements Screen, InputProcessor {
 
             toRender.setX((MathUtils.cos((i * angleIncrement) - shift) * widthRadius) + centerX);
             toRender.setY((MathUtils.sin((i * angleIncrement) - shift) * heightRadius) + centerY);
-            toRender.render(batch, viewport);
+
+            if(toRender.isExpanded()) {
+                expandedPlayers.add(toRender);
+            } else {
+                toRender.render(batch, viewport);
+            }
+        }
+
+        expandedPlayers.forEach(p -> p.render(batch, viewport));
+
+        if(RenderableCardGroup.isInDebugMode()) {
+            batch.end();
+            debugRenderer.begin(ShapeRenderer.ShapeType.Line);
+
+            debugRenderer.setProjectionMatrix(viewport.getCamera().combined);
+            debugRenderer.setColor(Color.GREEN);
+
+            gameState.players.forEach(p -> debugRenderer.line(centerX, centerY, p.getX(), p.getY()));
+
+            debugRenderer.end();
+            batch.begin();
         }
     }
 
@@ -474,6 +526,7 @@ public class GameScreen implements Screen, InputProcessor {
         case ROUND_END:
             enableButton(actionButton, () -> game.showLobbyScreen());
             actionButton.setText("Exit to lobby");
+            updateDelay = 10;
             break;
 
         case TURN_OVER:
@@ -570,34 +623,44 @@ public class GameScreen implements Screen, InputProcessor {
             }
             break;
 
-        case Input.Keys.LEFT:
-        case Input.Keys.RIGHT:
-            if(gameState.thisPlayerHand.isEmpty()) {
-                break;
-            }
-
-            var highlighted = gameState.thisPlayerHand.stream().filter(c -> c.entity.isHighlighted()).findAny();
-            if(highlighted.isPresent()) {
-                var highlightedCard = highlighted.get();
-                int nextHighlightIdx = (gameState.thisPlayerHand.indexOf(highlightedCard)
-                        + (keycode == Input.Keys.RIGHT ? 1 : -1)) % gameState.thisPlayerHand.size();
-                if(nextHighlightIdx < 0) {
-                    nextHighlightIdx = gameState.thisPlayerHand.size() - 1;
+        case Input.Keys.UP:
+        case Input.Keys.DOWN:
+            if(gameState.lastServerCode == ServerCode.SEND_FRIEND_CARDS || gameState.lastServerCode == ServerCode.INVALID_FRIEND_CARDS) {
+                if(gameState.friendCards.isEmpty()) {
+                    break;
                 }
 
-                gameState.thisPlayerHand.forEach(c -> c.entity.setHighlighted(false));
-                gameState.thisPlayerHand.get(nextHighlightIdx).entity.setHighlightable(true).setHighlighted(true);
-            } else {
-                gameState.thisPlayerHand.get(keycode == Input.Keys.RIGHT ? 0 : gameState.thisPlayerHand.size() - 1)
-                        .entity.setHighlightable(true).setHighlighted(true);
+                int valChange = (keycode == Input.Keys.UP) ? 1 : -1;
+                var editCard = gameState.friendCards.stream()
+                        .filter(c -> c.entity.isHighlighted())
+                        .findFirst().orElse(gameState.friendCards.get(0));
+                editCard.setCardNum(Math.floorMod(editCard.getCardNum() + valChange, Card.MAX_CARD_NUM));
             }
-            mouseControl = false;
+            break;
+
+        case Input.Keys.LEFT:
+        case Input.Keys.RIGHT:
+            if(gameState.lastServerCode == ServerCode.SEND_FRIEND_CARDS || gameState.lastServerCode == ServerCode.INVALID_FRIEND_CARDS) {
+                gameState.friendCards.forEach(c -> {
+                    c.entity.setProportionalXChangeOnHighlight(0);
+                    c.entity.setProportionalYChangeOnHighlight(0);
+                    c.entity.setProportionalXChangeOnSelect(0);
+                    c.entity.setProportionalYChangeOnSelect(0);
+                });
+                highlightNextInCardGroup(gameState.friendCards, keycode);
+            } else {
+                highlightNextInCardGroup(gameState.thisPlayerHand, keycode);
+            }
             break;
 
         case Input.Keys.SPACE:
             gameState.thisPlayerHand.stream()
                     .filter(c -> c.entity.isHighlighted())
-                    .findAny().ifPresent(c -> c.entity.toggleSelected());
+                    .findFirst().ifPresent(c -> c.entity.toggleSelected());
+            break;
+
+        case Input.Keys.D:
+            RenderableCardGroup.setDebug(!RenderableCardGroup.isInDebugMode());
             break;
         }
 
@@ -662,13 +725,10 @@ public class GameScreen implements Screen, InputProcessor {
             });
             for(var i = gameState.thisPlayerHand.reverseListIterator(); i.hasPrevious(); ) {
                 var entity = i.previous().entity;
-                if(entity.displayRectContainsPoint(newMousePos) || entity.baseRectContainsPoint(newMousePos)) {
-                    if(!entity.isSelected()) {
-                        entity.setHighlighted(true);
-                        break;
-                    } else if(entity.displayRectContainsPoint(newMousePos)) {
-                        break;
-                    }
+                if(entity.displayRectContainsPoint(newMousePos)
+                        || (!entity.isSelected() && entity.baseRectContainsPoint(newMousePos))) {
+                    entity.setHighlighted(true);
+                    break;
                 }
             }
         }
@@ -678,6 +738,32 @@ public class GameScreen implements Screen, InputProcessor {
     @Override
     public boolean scrolled(int amount) {
         return false;
+    }
+
+    public void highlightNextInCardGroup(RenderableCardGroup<RenderableShengJiCard> group, int keycode) {
+        if(group.isEmpty()) {
+            return;
+        }
+
+        if(keycode != Input.Keys.LEFT && keycode != Input.Keys.RIGHT) {
+            return;
+        }
+
+        var highlighted = group.stream().filter(c -> c.entity.isHighlighted()).findFirst();
+        if(highlighted.isPresent()) {
+            var highlightedCard = highlighted.get();
+            int nextHighlightIdx = (group.indexOf(highlightedCard)
+                    + (keycode == Input.Keys.RIGHT ? 1 : -1)) % group.size();
+            if(nextHighlightIdx < 0) {
+                nextHighlightIdx = group.size() - 1;
+            }
+
+            group.forEach(c -> c.entity.setHighlighted(false));
+            group.get(nextHighlightIdx).entity.setHighlightable(true).setHighlighted(true);
+        } else {
+            group.get(keycode == Input.Keys.RIGHT ? 0 : group.size() - 1)
+                    .entity.setHighlightable(true).setHighlighted(true);
+        }
     }
 
     private interface ButtonAction {

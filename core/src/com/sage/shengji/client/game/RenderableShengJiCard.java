@@ -86,8 +86,8 @@ public class RenderableShengJiCard extends ShengJiCard
         public final Color defaultFaceHighlightedBorderColor = new Color(Color.CYAN);
         public final Color defaultBackHighlightedBorderColor = new Color(Color.CYAN);
 
-        public float proportionalYChangeOnHighlight = defaultProportionalYChangeOnHighlight;
-        public float proportionalXChangeOnHighlight = defaultProportionalXChangeOnHighlight;
+        private float proportionalYChangeOnHighlight = defaultProportionalYChangeOnHighlight;
+        private float proportionalXChangeOnHighlight = defaultProportionalXChangeOnHighlight;
 
         private boolean highlightable = false;
         private boolean isHighlighted = false;
@@ -212,6 +212,14 @@ public class RenderableShengJiCard extends ShengJiCard
             return this;
         }
 
+        public float getProportionalXChangeOnSelect() {
+            return proportionalXChangeOnSelect;
+        }
+
+        public float getProportionalYChangeOnSelect() {
+            return proportionalYChangeOnSelect;
+        }
+
 
         // Selected setters:
         public RenderableShengJiCardEntity select() {
@@ -254,6 +262,31 @@ public class RenderableShengJiCard extends ShengJiCard
         }
 
         // Position change on highlight methods:
+        public RenderableShengJiCardEntity setProportionalYChangeOnHighlight(float proportionalYChangeOnHighlight) {
+            this.proportionalYChangeOnHighlight = proportionalYChangeOnHighlight;
+            if(isHighlighted && !isSelected) {
+                mover.setTargetDisplayProportionalYOffset(proportionalYChangeOnHighlight);
+            }
+            return this;
+        }
+        public RenderableShengJiCardEntity setAbsoluteYChangeOnHighlight(float absoluteYChangeOnHighlight) {
+            setProportionalYChangeOnHighlight(absoluteYChangeOnHighlight / getHeight());
+            return this;
+        }
+
+        public RenderableShengJiCardEntity setProportionalXChangeOnHighlight(float proportionalXChangeOnHighlight) {
+            this.proportionalXChangeOnHighlight = proportionalXChangeOnHighlight;
+            if(isHighlighted && !isSelected) {
+                mover.setTargetDisplayProportionalXOffset(proportionalXChangeOnHighlight);
+            }
+            return this;
+        }
+
+        public RenderableShengJiCardEntity setAbsoluteXChangeOnHighlight(float absoluteXChangeOnHighlight) {
+            setProportionalXChangeOnHighlight(absoluteXChangeOnHighlight / getWidth());
+            return this;
+        }
+
         public float getProportionalYChangeOnHighlight() {
             return proportionalYChangeOnHighlight;
         }

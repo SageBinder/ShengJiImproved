@@ -419,9 +419,10 @@ public class RoundRunner {
                                 threadExitNotifierObject.notify();
                             }
                             return;
+                        } else if(callPacket.networkCode != ClientCode.KITTY_CALL) {
+                            continue;
                         }
 
-                        ShengJiCard callCard = new ShengJiCard(Objects.requireNonNull((Integer)callPacket.get("card")), gameState);
                         synchronized(callLock) {
                             if(winningPlayer.get() != null) {
                                 p.sendCode(UNSUCCESSFUL_KITTY_CALL);

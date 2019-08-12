@@ -6,6 +6,8 @@ import java.util.Random;
 
 @SuppressWarnings("WeakerAccess")
 public class Card implements Comparable<Card> {
+    public static int MAX_CARD_NUM = 53;
+
     private static Random r = new Random();
 
     private Rank rank;

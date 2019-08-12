@@ -6,6 +6,7 @@ public enum ClientCode implements NetworkCode {
     PING,
     START_GAME,
     CALL,
+    KITTY_CALL,
     NO_CALL,
     NO_KITTY_CALL,
     KITTY,

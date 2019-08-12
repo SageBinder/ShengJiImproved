@@ -61,7 +61,7 @@ public class RenderablePlayer implements Renderable {
 
         float playTargetHeight = viewport.getWorldHeight() * ((isExpanded) ? expandedHeightProportion : heightProportion);
         float playTargetY = pos.y - playTargetHeight;
-        float playTargetWidth = ((play.prefDivisionProportion * 4) * playTargetHeight * RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO);
+        float playTargetWidth = ((play.prefDivisionProportion * 3) * playTargetHeight * RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO);
         float playTargetX = pos.x - (playTargetWidth * 0.5f);
 
         play.cardHeight = playTargetHeight;

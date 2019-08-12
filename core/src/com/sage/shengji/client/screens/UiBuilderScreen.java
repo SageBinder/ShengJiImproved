@@ -18,16 +18,15 @@ import com.sage.shengji.client.ShengJiGame;
 import com.sage.shengji.client.game.ClientGameState;
 import com.sage.shengji.client.game.RenderablePlayer;
 import com.sage.shengji.client.game.RenderableShengJiCard;
+import com.sage.shengji.server.network.ServerCode;
+import com.sage.shengji.utils.card.Card;
 import com.sage.shengji.utils.card.Rank;
 import com.sage.shengji.utils.card.Suit;
 import com.sage.shengji.utils.renderable.RenderableCardEntity;
 import com.sage.shengji.utils.renderable.RenderableCardGroup;
 import com.sage.shengji.utils.shengji.ShengJiCard;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 public class UiBuilderScreen extends InputAdapter implements Screen {
     private ClientGameState gameState;
@@ -61,10 +60,10 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
     private float handHeightProportion = 1f / 7f;
     private float expandedHandHeightProportion = 1f / 5f;
 
-    private float playersCenterXProportion = 0.55f;
+    private float playersCenterXProportion = 0.50f;
     private float playersCenterYProportion = 0.70f;
 
-    private float playersWidthRadiusProportion = 0.36f;
+    private float playersWidthRadiusProportion = 0.40f;
     private float playersHeightRadiusProportion = 0.19f;
 
     private boolean renderChoosingFriendCards = false;
@@ -112,23 +111,23 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         messageFont.getData().markupEnabled = true;
 
         var errorFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        errorFontParameter.size = textSize;
+        errorFontParameter.size = (int)(textSize * 0.8f);
         errorFontParameter.incremental = true;
         errorFont = fontGenerator.generateFont(errorFontParameter);
         errorFont.getData().markupEnabled = true;
 
         var trumpCardFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        trumpCardFontParameter.size = textSize;
+        trumpCardFontParameter.size = (int)(textSize * 0.85f);
         trumpCardFontParameter.incremental = true;
         trumpCardFont = fontGenerator.generateFont(trumpCardFontParameter);
 
         var collectedPointCardsFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        collectedPointCardsFontParameter.size = textSize;
+        collectedPointCardsFontParameter.size = (int)(textSize * 0.6f);
         collectedPointCardsFontParameter.incremental = true;
         collectedPointCardsFont = fontGenerator.generateFont(collectedPointCardsFontParameter);
 
         var friendCardsFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        friendCardsFontParameter.size = textSize;
+        friendCardsFontParameter.size = (int)(textSize * 0.85f);
         friendCardsFontParameter.incremental = true;
         friendCardsFont = fontGenerator.generateFont(friendCardsFontParameter);
 
@@ -141,8 +140,8 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         playerNameFontParameter.size = textSize;
         playerNameFontParameter.incremental = true;
         playerNameFont = fontGenerator.generateFont(playerNameFontParameter);
+        playerNameFont.getData().markupEnabled = true;
         RenderablePlayer.setNameFont(playerNameFont);
-
     }
 
     private void uiSetup() {
@@ -172,6 +171,9 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         inputProcessorsSetup();
         RenderableCardGroup.debug();
         gameState.thisPlayerHand.prefDivisionProportion = 0.4f;
+        gameState.thisPlayerHand.leftPaddingProportion = 0.15f;
+        gameState.thisPlayerHand.rightPaddingProportion = 0.15f;
+        gameState.thisPlayerHand.bottomPaddingProportion = 0.09f;
 
         gameState.players.clear();
         gameState.players.add(new RenderablePlayer(0, "This player"));
@@ -225,6 +227,9 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
                 new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState))));
         gameState.collectedPointCards.centerProportion = 0.0f;
 
+        gameState.numCollectedPoints = 60;
+        gameState.numPointsNeeded = 160;
+
         gameState.setTrump(Rank.FIVE, Suit.HEARTS);
         trumpCardGroup.clear();
         trumpCardGroup.add(gameState.trumpCard);
@@ -251,11 +256,12 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
 
         errorFont.draw(batch, gameState.errorMessage,
                 viewport.getWorldWidth() * playersCenterXProportion,
-                viewport.getWorldHeight() * playersCenterYProportion - errorFont.getCapHeight() * 3,
+                    gameState.thisPlayerHand.pos.y + (viewport.getWorldHeight() * handHeightProportion) + errorFont.getLineHeight(),
+//                viewport.getWorldHeight() * playersCenterYProportion - errorFont.getCapHeight(),
                 0, Align.center, false);
         messageFont.draw(batch, gameState.message,
                 viewport.getWorldWidth() * playersCenterXProportion,
-                viewport.getWorldHeight() * playersCenterYProportion - errorFont.getCapHeight(),
+                viewport.getWorldHeight() - errorFont.getCapHeight(),
                 0, Align.center, false);
 
         renderPlayers(viewport.getWorldWidth() * playersCenterXProportion,
@@ -277,9 +283,6 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
 
         renderTrumpCard();
         renderCollectedPointCards();
-        gameState.thisPlayerHand.leftPaddingProportion = 0.15f;
-        gameState.thisPlayerHand.rightPaddingProportion = 0.15f;
-        gameState.thisPlayerHand.bottomPaddingProportion = 0.09f;
         gameState.thisPlayerHand.render(batch, viewport);
         quitConfirmationFont.draw(batch, quitConfirmationText,
                 viewport.getWorldWidth() / 2,
@@ -303,17 +306,17 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
     }
 
     private void renderCollectedPointCards() {
-        gameState.collectedPointCards.regionWidth = gameState.players.get(0).getPlay().regionWidth * 1.5f;
-        gameState.collectedPointCards.cardHeight = gameState.players.get(0).getPlay().cardHeight * 1.2f;
+        gameState.collectedPointCards.regionWidth = viewport.getWorldWidth() / 8f;
+        gameState.collectedPointCards.cardHeight = viewport.getWorldHeight() / 10f;
         gameState.collectedPointCards.setPos(
-                viewport.getWorldWidth() * 0.05f,
-                viewport.getWorldHeight() * 0.8f);
+                gameState.collectedPointCards.regionWidth * 0.1f,
+                viewport.getWorldHeight() - gameState.collectedPointCards.cardHeight - (gameState.collectedPointCards.regionWidth * 0.1f));
         gameState.collectedPointCards.render(batch, viewport);
 
         collectedPointCardsFont.draw(batch,
                 gameState.numCollectedPoints + "/" + gameState.numPointsNeeded + " points",
                 gameState.collectedPointCards.pos.x + (gameState.collectedPointCards.regionWidth * 0.5f),
-                gameState.collectedPointCards.pos.y - (collectedPointCardsFont.getXHeight() * 2),
+                viewport.getWorldHeight() - collectedPointCardsFont.getXHeight() * 0.25f,
                 0, Align.center, false);
     }
 
@@ -433,31 +436,25 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         float angleIncrement = MathUtils.PI2 / players.size();
         float shift = (players.indexOf(gameState.thisPlayer) * angleIncrement) + (MathUtils.PI * 0.5f);
 
-        Map<Integer, RenderablePlayer> expandedPlayers = new HashMap<>();
-
+        List<RenderablePlayer> expandedPlayers = new ArrayList<>();
 
         for(int i = 0; i < players.size(); i++) {
             RenderablePlayer toRender = players.get(i);
             if(toRender == null) {
                 continue;
-            } else if(toRender.isExpanded()) {
-                expandedPlayers.put(i, toRender);
-                continue;
             }
 
             toRender.setX((MathUtils.cos((i * angleIncrement) - shift) * widthRadius) + centerX);
             toRender.setY((MathUtils.sin((i * angleIncrement) - shift) * heightRadius) + centerY);
-            toRender.render(batch, viewport);
+
+            if(toRender.isExpanded()) {
+                expandedPlayers.add(toRender);
+            } else {
+                toRender.render(batch, viewport);
+            }
         }
 
-        for(var i : expandedPlayers.keySet()) {
-            RenderablePlayer toRender = expandedPlayers.get(i);
-            float playerX = (MathUtils.cos((i * angleIncrement) - shift) * widthRadius) + centerX;
-            float playerY = (MathUtils.sin((i * angleIncrement) - shift) * heightRadius) + centerY;
-            toRender.setX(playerX);
-            toRender.setY(playerY);
-            toRender.render(batch, viewport);
-        }
+        expandedPlayers.forEach(p -> p.render(batch, viewport));
 
         if(RenderableCardGroup.isInDebugMode()) {
             batch.end();
@@ -510,33 +507,40 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
             game.showStartScreen();
             break;
 
-        case Input.Keys.LEFT:
-        case Input.Keys.RIGHT:
-            if(gameState.thisPlayerHand.isEmpty()) {
-                break;
-            }
-
-            var highlighted = gameState.thisPlayerHand.stream().filter(c -> c.entity.isHighlighted()).findAny();
-            if(highlighted.isPresent()) {
-                var highlightedCard = highlighted.get();
-                int nextHighlightIdx = (gameState.thisPlayerHand.indexOf(highlightedCard)
-                        + (keycode == Input.Keys.RIGHT ? 1 : -1)) % gameState.thisPlayerHand.size();
-                if(nextHighlightIdx < 0) {
-                    nextHighlightIdx = gameState.thisPlayerHand.size() - 1;
+        case Input.Keys.UP:
+        case Input.Keys.DOWN:
+            if(gameState.lastServerCode == ServerCode.SEND_FRIEND_CARDS || gameState.lastServerCode == ServerCode.INVALID_FRIEND_CARDS || renderChoosingFriendCards) {
+                if(gameState.friendCards.isEmpty()) {
+                    break;
                 }
 
-                gameState.thisPlayerHand.forEach(c -> c.entity.setHighlighted(false));
-                gameState.thisPlayerHand.get(nextHighlightIdx).entity.setHighlightable(true).setHighlighted(true);
+                int valChange = (keycode == Input.Keys.UP) ? 1 : -1;
+                var editCard = gameState.friendCards.stream()
+                        .filter(c -> c.entity.isHighlighted())
+                        .findFirst().orElse(gameState.friendCards.get(0));
+                editCard.setCardNum(Math.floorMod(editCard.getCardNum() + valChange, Card.MAX_CARD_NUM));
+            }
+            break;
+
+        case Input.Keys.LEFT:
+        case Input.Keys.RIGHT:
+            if(gameState.lastServerCode == ServerCode.SEND_FRIEND_CARDS || gameState.lastServerCode == ServerCode.INVALID_FRIEND_CARDS || renderChoosingFriendCards) {
+                gameState.friendCards.forEach(c -> {
+                    c.entity.setProportionalXChangeOnHighlight(0);
+                    c.entity.setProportionalYChangeOnHighlight(0);
+                    c.entity.setProportionalXChangeOnSelect(0);
+                    c.entity.setProportionalYChangeOnSelect(0);
+                });
+                highlightNextInCardGroup(gameState.friendCards, keycode);
             } else {
-                gameState.thisPlayerHand.get(keycode == Input.Keys.RIGHT ? 0 : gameState.thisPlayerHand.size() - 1)
-                        .entity.setHighlightable(true).setHighlighted(true);
+                highlightNextInCardGroup(gameState.thisPlayerHand, keycode);
             }
             break;
 
         case Input.Keys.SPACE:
             gameState.thisPlayerHand.stream()
                     .filter(c -> c.entity.isHighlighted())
-                    .findAny().ifPresent(c -> c.entity.toggleSelected());
+                    .findFirst().ifPresent(c -> c.entity.toggleSelected());
             break;
 
         case Input.Keys.Q:
@@ -607,5 +611,31 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
             }
         }
         return false;
+    }
+
+    public void highlightNextInCardGroup(RenderableCardGroup<RenderableShengJiCard> group, int keycode) {
+        if(group.isEmpty()) {
+            return;
+        }
+
+        if(keycode != Input.Keys.LEFT && keycode != Input.Keys.RIGHT) {
+            return;
+        }
+
+        var highlighted = group.stream().filter(c -> c.entity.isHighlighted()).findFirst();
+        if(highlighted.isPresent()) {
+            var highlightedCard = highlighted.get();
+            int nextHighlightIdx = (group.indexOf(highlightedCard)
+                    + (keycode == Input.Keys.RIGHT ? 1 : -1)) % group.size();
+            if(nextHighlightIdx < 0) {
+                nextHighlightIdx = group.size() - 1;
+            }
+
+            group.forEach(c -> c.entity.setHighlighted(false));
+            group.get(nextHighlightIdx).entity.setHighlightable(true).setHighlighted(true);
+        } else {
+            group.get(keycode == Input.Keys.RIGHT ? 0 : group.size() - 1)
+                    .entity.setHighlightable(true).setHighlighted(true);
+        }
     }
 }
