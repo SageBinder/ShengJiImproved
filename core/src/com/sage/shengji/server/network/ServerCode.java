@@ -36,6 +36,8 @@ public enum ServerCode implements NetworkCode {
     WAIT_FOR_KITTY_CALL_WINNER,
     KITTY_EXHAUSTED_REDEAL,
 
+    // General calling codes:
+    WAIT_FOR_NO_CALL_PLAYER,
     WAITING_ON_CALLER,
 
     // Kitty codes:

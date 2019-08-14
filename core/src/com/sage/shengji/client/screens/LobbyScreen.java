@@ -192,6 +192,10 @@ public class LobbyScreen implements Screen, InputProcessor {
         quitConfirmationFlag = false;
         quitConfirmationTimer.clear();
         inputProcessorsSetup();
+
+        table.invalidate();
+        playersListTable.invalidate();
+        updateUIFromGameState();
     }
 
     @Override
@@ -319,6 +323,10 @@ public class LobbyScreen implements Screen, InputProcessor {
         }
 
         gameStateMessageLabel.setText(gameState.message);
+        if(messageLabel.getText().toString().isEmpty()) {
+            messageLabel.setText(gameState.errorMessage);
+        }
+
         if(gameState.thisPlayer != null && !gameState.thisPlayer.isHost()) {
             gameIPLabel.setText("Connected to [YELLOW]"
                     + gameState.hostPlayer.getName()

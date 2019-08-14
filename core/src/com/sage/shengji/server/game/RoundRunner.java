@@ -9,6 +9,7 @@ import com.sage.shengji.server.network.ServerPacket;
 import com.sage.shengji.utils.card.Card;
 import com.sage.shengji.utils.card.CardList;
 import com.sage.shengji.utils.card.InvalidCardException;
+import com.sage.shengji.utils.card.Suit;
 import com.sage.shengji.utils.shengji.ShengJiCard;
 import com.sage.shengji.utils.shengji.Team;
 
@@ -75,7 +76,7 @@ public class RoundRunner {
             gameState.turnPlayer = gameState.caller;
             do {
                 TrickRunner.playTrick(gameState);
-            } while(gameState.players.stream().anyMatch(p -> p.hand.size() > 0));
+            } while(gameState.players.stream().allMatch(p -> p.hand.size() > 0));
 
             gameState.players.sendPacketToAll(updateRanksAndGetRoundEndPacket(gameState));
         } finally {
@@ -256,6 +257,16 @@ public class RoundRunner {
     // The code for establishCaller and establishKittyCaller have essentially the exact same structure, but with the
     // minor differences, I don't think it's worth it to try to reduce code duplication here
     private static void establishCaller(ServerGameState gameState) {
+        // GAAAHHHHHHH THIS IS TERRIBLE REEEEEEEEEEEEEEEEEEEEEEE
+        // Basically, what playRound() sets as onDisconnectAction for each player breaks calling code.
+        // It's supposed to interrupt the packet waiting of every player if anybody disconnects.
+        // In this code, however, that causes packet waiting to be interrupted before playerDisconnected is set,
+        // which means the catch block for InterruptedException doesn't think a player is disconnected,
+        // and it goes back to waiting.
+        // At the end of this method, every player's onDisconnectAction is once again set to interrupt the
+        // packet waiting of all players.
+        gameState.players.forEach(Player::resetOnDisconnect);
+
         final Object threadExitNotifierObject = new Object();
         AtomicBoolean playerDisconnected = new AtomicBoolean(false);
         AtomicInteger numFinishedThreads = new AtomicInteger(0);
@@ -274,14 +285,20 @@ public class RoundRunner {
                 while(true) {
                     try {
                         ClientPacket callPacket = p.waitForPacket();
-                        if(callPacket.networkCode == ClientCode.NO_CALL && leadingPlayer.get() != p) {
-                            // A player cannot take back their call if their call is currently leading
-                            p.sendCode(NO_CALL);
-                            synchronized(threadExitNotifierObject) {
-                                numFinishedThreads.incrementAndGet();
-                                threadExitNotifierObject.notify();
+                        if(callPacket.networkCode == ClientCode.NO_CALL) {
+                            if(leadingPlayer.get() != p) {
+                                // A player cannot take back their call if their call is currently leading
+                                p.sendCode(NO_CALL);
+                                synchronized(threadExitNotifierObject) {
+                                    gameState.players.sendPacketToAll(new ServerPacket(WAIT_FOR_NO_CALL_PLAYER)
+                                            .put("player", p.getPlayerNum()));
+                                    numFinishedThreads.incrementAndGet();
+                                    threadExitNotifierObject.notify();
+                                }
+                                return;
+                            } else {
+                                continue;
                             }
-                            return;
                         } else if(callPacket.networkCode != ClientCode.CALL) {
                             continue;
                         }
@@ -305,17 +322,22 @@ public class RoundRunner {
                                         .put("playernum", p.getPlayerNum())
                                         .put("cardnum", leadingCallCard.get().getCardNum())
                                         .put("order", leadingCallOrder.get()));
+                                synchronized(threadExitNotifierObject) {
+                                    // We must notify the main thread so that it checks to see if p is the only player
+                                    // who hasn't send a NO_CALL packet.
+                                    threadExitNotifierObject.notify();
+                                }
                             }
                         }
                     } catch(InterruptedException e) {
-                        if(playerDisconnected.get()
-                                || (numFinishedThreads.get() == numPlayers - 1 && leadingPlayer.get() == p)) {
-                            synchronized(threadExitNotifierObject) {
+                        synchronized(threadExitNotifierObject) {
+                            if(playerDisconnected.get()
+                                    || (numFinishedThreads.get() == numPlayers - 1 && leadingPlayer.get() == p)) {
                                 numFinishedThreads.incrementAndGet();
                                 threadExitNotifierObject.notify();
                             }
-                            return;
                         }
+                        return;
                     } catch(ClassCastException | NullPointerException e) {
                         p.sendCode(INVALID_CALL);
                     } catch(PlayerDisconnectedException e) {
@@ -345,7 +367,9 @@ public class RoundRunner {
                     alreadyInterrupted = true;
                 } else if(numFinishedThreads.get() == numPlayers - 1 && leadingPlayer.get() != null) {
                     leadingPlayer.get().interruptPacketWaiting();
-                } else if(numFinishedThreads.get() == numPlayers) {
+                }
+
+                if(numFinishedThreads.get() == numPlayers) {
                     break;
                 }
 
@@ -380,6 +404,10 @@ public class RoundRunner {
             gameState.players.sendPacketToAll(new ServerPacket(NO_ONE_CALLED));
             establishKittyCaller(gameState, 0);
         }
+
+        gameState.players.forEach(p -> p.setOnDisconnect(() -> {
+            gameState.players.forEach(Player::interruptPacketWaiting);
+        }));
     }
 
     // THIS METHOD IS RECURSIVE, DEAR GOD I'M SO SORRY
@@ -415,6 +443,8 @@ public class RoundRunner {
                         if(callPacket.networkCode == ClientCode.NO_KITTY_CALL) {
                             p.sendCode(NO_KITTY_CALL);
                             synchronized(threadExitNotifierObject) {
+                                gameState.players.sendPacketToAll(new ServerPacket(WAIT_FOR_NO_CALL_PLAYER)
+                                        .put("player", p.getPlayerNum()));
                                 numFinishedThreads.incrementAndGet();
                                 threadExitNotifierObject.notify();
                             }
@@ -425,7 +455,11 @@ public class RoundRunner {
 
                         synchronized(callLock) {
                             if(winningPlayer.get() != null) {
-                                p.sendCode(UNSUCCESSFUL_KITTY_CALL);
+                                p.sendPacket(new ServerPacket(UNSUCCESSFUL_KITTY_CALL)
+                                        .put("message", "Someone already called (are you lagging?)"));
+                            } else if(gameState.kitty.stream().limit(kittyPullIdx + 1).allMatch(Card::isJoker)) {
+                                p.sendPacket(new ServerPacket(UNSUCCESSFUL_KITTY_CALL)
+                                        .put("message", "No valid card has been pulled from kitty"));
                             } else {
                                 p.sendCode(SUCCESSFUL_KITTY_CALL);
                                 winningPlayer.set(p);
@@ -473,7 +507,8 @@ public class RoundRunner {
                 if((playerDisconnected.get() || winningPlayer.get() != null) && !alreadyInterrupted) {
                     gameState.players.forEach(Player::interruptPacketWaiting);
                     alreadyInterrupted = true;
-                } else if(numFinishedThreads.get() == numPlayers) {
+                }
+                if(numFinishedThreads.get() == numPlayers) {
                     break;
                 }
 
@@ -496,12 +531,17 @@ public class RoundRunner {
         }
 
         if(winningPlayer.get() != null) {
+            var effectiveKittyCard = gameState.kitty.stream()
+                    .limit(kittyPullIdx + 1)
+                    .filter(c -> !c.isJoker())
+                    .reduce((a, b) -> b);
+            gameState.trumpRank = winningPlayer.get().getCallRank();
+            gameState.trumpSuit = effectiveKittyCard.isPresent() ? effectiveKittyCard.get().getSuit() : Suit.JOKER;
             gameState.players.sendPacketToAll(new ServerPacket(WAIT_FOR_KITTY_CALL_WINNER)
                     .put("playernum", winningPlayer.get().getPlayerNum())
-                    .put("callcardnum", kittyCard.getCardNum()));
+                    .put("trumprank", gameState.trumpRank)
+                    .put("trumpsuit", gameState.trumpSuit));
             gameState.caller = winningPlayer.get();
-            gameState.trumpSuit = kittyCard.getSuit();
-            gameState.trumpRank = winningPlayer.get().getCallRank();
         } else {
             establishKittyCaller(gameState, kittyPullIdx + 1);
         }

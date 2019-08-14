@@ -80,8 +80,8 @@ public class RenderableShengJiCard extends ShengJiCard
         public float defaultProportionalYChangeOnHighlight = 0.45f;
         public float defaultProportionalXChangeOnHighlight = 0.05f;
 
-        public final Color defaultFaceHighlightedBackgroundColor = new Color(1.0f, 1.0f, 0.5f, 1f);
-        public final Color defaultBackHighlightedBackgroundColor = new Color(defaultBackBackgroundColor);
+        public final Color defaultFaceHighlightedBackgroundColor = new Color(1f, 0.98f, 0.7f, 1f);
+        public final Color defaultBackHighlightedBackgroundColor = new Color(1.0f, 1.0f, 0.5f, 1f);
 
         public final Color defaultFaceHighlightedBorderColor = new Color(Color.CYAN);
         public final Color defaultBackHighlightedBorderColor = new Color(Color.CYAN);
@@ -94,11 +94,15 @@ public class RenderableShengJiCard extends ShengJiCard
 
         // Other:
         // HOLY MOTHERFUCKING CHRIST, IF THIS COLOR IS 0.75f, 0.75f, 0, 1, IT APPARENTLY CAUSES A HASH COLLISION WITH
-        // THE THE POINT BORDER COLOR. THAT'S WHY I'VE MADE IT 0.76f AND NOT 0.75f. FUCK.
-        public final Color defaultPointCardFaceBorderColor = new Color(0.76f, 0.75f, 0f, 1f);
-        public final Color defaultPointCardBackBorderColor = new Color(defaultPointCardFaceBorderColor);
+        // THE THE TRUMP BORDER COLOR. THAT'S WHY I'VE MADE IT 0.76f AND NOT 0.75f. FUCK.
+        public final Color defaultTrumpCardFaceBorderColor = new Color(0.76f, 0.75f, 0f, 1f);
+        public final Color defaultTrumpCardBackBorderColor = new Color(0.76f, 0.75f, 0f, 1f);
+
+        public final Color defaultPointCardFaceBackgroundColor = new Color(0.8f, 0.8f, 1f, 1f);
+        public final Color defaultPointCardBackBackgroundColor = new Color(0.8f, 0.8f, 1f, 1f);
 
         private boolean lastKnownIsTrumpValue = false;
+        private boolean lastKnownIsPointCardValue = false;
 
         private RenderableShengJiCardEntity(RenderableShengJiCard other) {
             super(other);
@@ -107,26 +111,18 @@ public class RenderableShengJiCard extends ShengJiCard
 
         @Override
         protected void cardChangedImpl() {
-            setBorderColorIfTrump();
+            resetBothBackgroundColors();
+            resetBothBorderColors();
             lastKnownIsTrumpValue = isTrump();
+            lastKnownIsPointCardValue = isPointCard();
         }
 
         @Override
         public void renderAt(SpriteBatch batch, Viewport viewport, float x, float y, float width, float height, float originXProportion, float originYProportion, float rotationDeg) {
-            if(isTrump() != lastKnownIsTrumpValue) {
+            if(isTrump() != lastKnownIsTrumpValue || isPointCard() != lastKnownIsPointCardValue) {
                 cardChangedImpl();
             }
             super.renderAt(batch, viewport, x, y, width, height, originXProportion, originYProportion, rotationDeg);
-        }
-
-        private void setBorderColorIfTrump() {
-            if(isTrump()) {
-                setFaceBorderColor(defaultPointCardFaceBorderColor);
-                setBackBorderColor(defaultPointCardBackBorderColor);
-            } else {
-                setFaceBorderColor(defaultFaceBorderColor);
-                setBackBorderColor(defaultBackBorderColor);
-            }
         }
 
         @Override
@@ -134,7 +130,7 @@ public class RenderableShengJiCard extends ShengJiCard
             if(isHighlighted) {
                 return super.setFaceBorderColor(defaultFaceHighlightedBorderColor);
             } else if(isTrump()) {
-                return super.setFaceBorderColor(defaultPointCardFaceBorderColor);
+                return super.setFaceBorderColor(defaultTrumpCardFaceBorderColor);
             } else {
                 return super.resetFaceBorderColor();
             }
@@ -145,7 +141,7 @@ public class RenderableShengJiCard extends ShengJiCard
             if(isHighlighted) {
                 return super.setBackBorderColor(defaultBackHighlightedBorderColor);
             } else if(isTrump()) {
-                return super.setBackBorderColor(defaultPointCardBackBorderColor);
+                return super.setBackBorderColor(defaultTrumpCardBackBorderColor);
             } else {
                 return super.resetBackBorderColor();
             }
@@ -157,6 +153,8 @@ public class RenderableShengJiCard extends ShengJiCard
                 return super.setFaceBackgroundColor(defaultFaceSelectedBackgroundColor);
             } else if(isHighlighted) {
                 return super.setFaceBackgroundColor(defaultFaceHighlightedBackgroundColor);
+            } else if(isPointCard()) {
+                return super.setFaceBackgroundColor(defaultPointCardFaceBackgroundColor);
             } else {
                 return super.resetFaceBackgroundColor();
             }
@@ -168,6 +166,8 @@ public class RenderableShengJiCard extends ShengJiCard
                 return super.setBackBackgroundColor(defaultBackSelectedBackgroundColor);
             } else if(isHighlighted) {
                 return super.setBackBackgroundColor(defaultBackHighlightedBackgroundColor);
+            } else if(isPointCard()) {
+                return super.setBackBackgroundColor(defaultPointCardFaceBackgroundColor);
             } else {
                 return super.resetBackBackgroundColor();
             }

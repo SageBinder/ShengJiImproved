@@ -51,14 +51,15 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
             rotationRad %= MathUtils.PI2;
         }
 
-        for(int i = 0; i < size(); i++) {
-            RenderableCardEntity e = get(i).entity();
+        if(useCardMover) {
+            for(int i = 0; i < size(); i++) {
+                RenderableCardEntity e = get(i).entity();
 
-            float rotCos = MathUtils.cos(rotationRad);
-            float rotSin = MathUtils.sin(rotationRad);
-            float relativeX = i * division + offset;
-            e.setOriginProportion(0, 0);
-            if(useCardMover) {
+                float rotCos = MathUtils.cos(rotationRad);
+                float rotSin = MathUtils.sin(rotationRad);
+                float relativeX = i * division + offset;
+
+                e.setOriginProportion(0, 0);
                 if(wrapped) {
                     // Gotta subtract PI2 (not mod PI2) so that the rotation direction is correct
                     e.rotateRad(-MathUtils.PI2);
@@ -67,12 +68,9 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
                         .setTargetHeight(cardHeight)
                         .setTargetX(pos.x + (relativeX * rotCos))
                         .setTargetY(pos.y + (relativeX * rotSin));
-            } else {
-                e.setRotationRad(rotationRad)
-                        .setHeight(cardHeight)
-                        .setX(pos.x + (relativeX * rotCos))
-                        .setY(pos.y + (relativeX * rotSin));
             }
+        } else {
+            snapCards(division, offset, wrapped);
         }
 
         super.render(batch, viewport, renderBase);
@@ -81,6 +79,36 @@ public class RenderableCardGroup<T extends Card & RenderableCard> extends Render
             renderDebugLines(viewport);
             batch.begin();
         }
+    }
+
+    private void snapCards(float division, float offset, boolean wrapped) {
+        for(int i = 0; i < size(); i++) {
+            RenderableCardEntity e = get(i).entity();
+
+            float rotCos = MathUtils.cos(rotationRad);
+            float rotSin = MathUtils.sin(rotationRad);
+            float relativeX = i * division + offset;
+
+            e.setOriginProportion(0, 0);
+            if(wrapped) {
+                // Gotta subtract PI2 (not mod PI2) so that the rotation direction is correct
+                e.rotateRad(-MathUtils.PI2);
+            }
+            e.setRotationRad(rotationRad)
+                    .setHeight(cardHeight)
+                    .setX(pos.x + (relativeX * rotCos))
+                    .setY(pos.y + (relativeX * rotSin));
+        }
+    }
+
+    public void snapCards() {
+        float cardPositionRegionWidth = regionWidth - (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * cardHeight);
+        float division = Math.min(RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * cardHeight * prefDivisionProportion,
+                cardPositionRegionWidth / (size() - 1));
+        float offset = MathUtils.clamp((cardPositionRegionWidth * centerProportion) - (centerProportion * division * (size() - 1)),
+                0,
+                cardPositionRegionWidth * centerProportion);
+        snapCards(division, offset, false);
     }
 
     public void setPos(float x, float y) {

@@ -86,6 +86,10 @@ class Play extends CardList<ShengJiCard> {
     private PlayLegalityResult determineIsLegal() {
         if(size() == 0) {
             return new PlayLegalityResult(false, "Play contained 0 cards");
+        } else if(!isBasePlay && size() != gameState.basePlay.size()) {
+            return new PlayLegalityResult(false,
+                    "Play contained " + size() + " card" + (size() != 1 ? "s" : "") + ", " + "should contain " +
+                            gameState.basePlay.size() + " card" + (gameState.basePlay.size() != 1 ? "s" : ""));
         }
 
         // If the player's hand doesn't contain all the cards in the play, then obviously it's not legal
@@ -125,7 +129,7 @@ class Play extends CardList<ShengJiCard> {
                     if(groupedHandInBaseSuit.stream().anyMatch(handGroup -> handGroup.size() == _tuple)) {
                         if(groupedPlayCopy.stream().noneMatch(playGroup -> playGroup.size() == _tuple
                                 && playGroup.get(0).getEffectiveSuit() == basePlayEffectiveSuit)) {
-                            return new PlayLegalityResult(false, "You must match the base play tuples as closely as possible");
+                            return new PlayLegalityResult(false, "You did not match the base play");
                         }
 
                         // Remove the hand group that adheres to basePlayStructure because it can't be used to adhere to

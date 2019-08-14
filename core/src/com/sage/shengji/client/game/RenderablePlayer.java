@@ -31,6 +31,7 @@ public class RenderablePlayer implements Renderable {
     }
 
     private String colorString = "";
+    private String pNumColorString = "";
     private boolean isExpanded = false;
 
     private final RenderableCardGroup<RenderableShengJiCard> pointCards = new RenderableCardGroup<>();
@@ -55,7 +56,8 @@ public class RenderablePlayer implements Renderable {
 
     @Override
     public void render(SpriteBatch batch, Viewport viewport) {
-        nameFont.draw(batch, "P" + playerNum + ": " + colorString + getName(),
+        nameFont.draw(batch,
+                pNumColorString + "(" + callRank.toAbbrevString() + ") P" + playerNum + ": " + colorString + getName(),
                 pos.x, pos.y + (nameFont.getXHeight() * 2),
                 0, Align.center, false);
 
@@ -102,18 +104,29 @@ public class RenderablePlayer implements Renderable {
         nameFont = font;
     }
 
-    public void setNameColor(Color nameColor) {
-        if(nameColor != null) {
-            System.out.println("Received color " + nameColor.toString());
+    public void setNameColor(Color color) {
+        if(color != null) {
             colorString = "[#"
-                    + nameColor.toString().substring(0, 2)
-                    + nameColor.toString().substring(2, 4)
-                    + nameColor.toString().substring(4, 6)
-                    + nameColor.toString().substring(6, 8)
+                    + color.toString().substring(0, 2)
+                    + color.toString().substring(2, 4)
+                    + color.toString().substring(4, 6)
+                    + color.toString().substring(6, 8)
                     + "]";
-            System.out.println("colorString = " + colorString);
         } else {
             colorString = "";
+        }
+    }
+
+    public void setPlayerNumColorString(Color color) {
+        if(color != null) {
+            pNumColorString = "[#"
+                    + color.toString().substring(0, 2)
+                    + color.toString().substring(2, 4)
+                    + color.toString().substring(4, 6)
+                    + color.toString().substring(6, 8)
+                    + "]";
+        } else {
+            pNumColorString = "";
         }
     }
 

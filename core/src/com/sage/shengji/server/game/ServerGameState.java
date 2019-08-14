@@ -92,12 +92,6 @@ public class ServerGameState extends ShengJiGameState {
                 && call.getRank() == p.getCallRank();
     }
 
-    boolean isLegalKittyCall(Player p, ShengJiCard call, int kittyCardIdx) {
-        ShengJiCard kittyCard;
-        while((kittyCard = kitty.get(kittyCardIdx--)).isJoker() && kittyCardIdx >= 0);
-        return !kittyCard.isJoker() && p.hand.containsValue(call) && call.getSuit() == kittyCard.getSuit();
-    }
-
     boolean isLegalKitty(Player p, CardList<ShengJiCard> newKitty) {
         return newKitty.stream()
                 .distinct()

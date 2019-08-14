@@ -27,6 +27,12 @@ public class ClientGameState extends ShengJiGameState {
     public static final Color winningPlayColor = new Color(238f / 255f, 221f / 255f, 130f / 255f, 1f);
     public static final Color basePlayColor = Color.LIGHT_GRAY;
     public static final Color turnPlayerNameColor = Color.LIGHT_GRAY;
+    public static final Color noCallPlayerNameColor = Color.RED;
+
+    public static final Color effectiveKittyCardBorderColor = Color.GREEN;
+    public static final Color effectiveKittyCardBackgroundColor = new Color(0.8f, 1f, 0.8f, 1f);
+
+    public static final Color callRankCardsBorderColor = Color.GREEN;
 
     public static final Color invalidatedFriendCardBackgroundColor = new Color(Color.LIGHT_GRAY);
     public static final Color invalidatedFriendCardBorderColor = new Color(Color.RED);
@@ -34,6 +40,7 @@ public class ClientGameState extends ShengJiGameState {
     public static final Color keepersNameColor = new Color(Color.GREEN);
     public static final Color collectorsNameColor = new Color(Color.ORANGE);
     public static final Color noTeamNameColor = new Color(Color.WHITE);
+    public static final Color finalCollectedPointsTextColor = new Color(Color.ROYAL);
 
     private Updater updater = new Updater();
     private final ShengJiGame game;
@@ -44,6 +51,7 @@ public class ClientGameState extends ShengJiGameState {
     public RenderablePlayer turnPlayer;
     public RenderablePlayer leadingPlayer;
     public RenderablePlayer hostPlayer;
+    public RenderablePlayer basePlayer;
 
     public RenderablePlayer thisPlayer;
     public final RenderableHand<RenderableShengJiCard> thisPlayerHand = new RenderableHand<>();
@@ -59,7 +67,7 @@ public class ClientGameState extends ShengJiGameState {
 
     public final RenderableCardList<RenderableShengJiCard> lastAttemptedKitty = new RenderableCardList<>();
 
-    public RenderableShengJiCard trumpCard;
+    public final RenderableCardGroup<RenderableShengJiCard> trumpCardGroup = new RenderableCardGroup<>();
 
     public ServerCode lastServerCode;
     public String message = "";
@@ -79,6 +87,7 @@ public class ClientGameState extends ShengJiGameState {
     private void cleanNoPlayersReset() {
         turnPlayer = null;
         leadingPlayer = null;
+        basePlayer = null;
 
         thisPlayerHand.clear();
         thisPlayerCurrentCall.clear();
@@ -131,6 +140,7 @@ public class ClientGameState extends ShengJiGameState {
                 lastServerCode = serverCode;
             }
             this.data = data;
+            errorMessage = "";
             try {
                 switch(lastServerCode) {
                     // General codes:
@@ -191,6 +201,9 @@ public class ClientGameState extends ShengJiGameState {
                 case KITTY_EXHAUSTED_REDEAL:
                     kittyExhaustedRedeal(); break;
 
+                    // General calling codes:
+                case WAIT_FOR_NO_CALL_PLAYER:
+                    waitForNoCallPlayer(); break;
                 case WAITING_ON_CALLER:
                     waitingOnCaller(); break;
 
@@ -265,7 +278,9 @@ public class ClientGameState extends ShengJiGameState {
         }
 
         private void playerDisconnected() {
+            cleanNoPlayersReset();
             errorMessage = "[YELLOW]A player has disconnected!";
+            message = "";
             game.showLobbyScreen();
         }
 
@@ -324,6 +339,11 @@ public class ClientGameState extends ShengJiGameState {
         // --- CALLING CODES ---
         private void makeCall() {
             message = "Make call";
+            thisPlayerHand.stream().filter(c -> c.getRank() == thisPlayer.getCallRank()).forEach(c -> {
+                c.entity.setFaceBorderThicknessRelativeToWidth(0.036f);
+                c.entity.defaultFaceBorderColor.set(callRankCardsBorderColor);
+                c.entity.setFaceBorderColor(callRankCardsBorderColor);
+            });
         }
 
         private void successfulCall() {
@@ -344,6 +364,8 @@ public class ClientGameState extends ShengJiGameState {
                         .filter(c -> c.getCardNum() == callCardNum)
                         .limit(callOrder)
                         .collect(Collectors.toCollection(CardList::new));
+                callFromHand.forEach(c -> c.setSelected(false).setHighlighted(false));
+
                 thisPlayerHand.addAll(thisPlayer.getPlay());
                 thisPlayerHand.removeAll(callFromHand);
                 thisPlayer.clearPlay();
@@ -370,10 +392,9 @@ public class ClientGameState extends ShengJiGameState {
         }
 
         private void noCall() {
-            message = "You have chosen not to call";
-
             thisPlayerHand.addAll(thisPlayer.getPlay()); // thisPlayer.getPlay() SHOULD be empty
             thisPlayer.clearPlay();
+            thisPlayer.setNameColor(noCallPlayerNameColor);
         }
 
         private void waitForNewLeadingCall() {
@@ -389,7 +410,7 @@ public class ClientGameState extends ShengJiGameState {
                 throw new InvalidServerPacketException("waitForNewLeadingCall() - Server sent 0 for callOrder");
             }
 
-            players.forEach(p -> p.setNameColor(null));
+            players.stream().filter(c -> !c.getPlay().isEmpty()).forEach(p -> p.setNameColor(null));
             callLeader.setNameColor(Color.GREEN);
 
             if(callLeader != thisPlayer) {
@@ -400,8 +421,16 @@ public class ClientGameState extends ShengJiGameState {
                     callLeader.getPlay().add(new RenderableShengJiCard(callCardNum, ClientGameState.this));
                 }
                 message = callLeader.getColoredName() + " is now leading the call";
+
+//                if(thisPlayerHand.stream()
+//                        .filter(c -> c.getRank() == thisPlayer.getCallRank())
+//                        .distinct()
+//                        .noneMatch(c -> Collections.frequency(thisPlayerHand.toCardNumList(), c.getCardNum()) >= callOrder)) {
+//                    actions.sendNoCall();
+//                }
+            } else {
+                players.stream().filter(p -> p != thisPlayer).forEach(RenderablePlayer::clearPlay);
             }
-            // If thisPlayer is already the call leader, it should be safe to ignore this packet
         }
 
         private void waitForCallWinner() {
@@ -435,19 +464,42 @@ public class ClientGameState extends ShengJiGameState {
                 message = callWinner.getColoredName() + " ";
             }
             message += "won the call with " + callCard.toAbbrevString() + " (" + callOrder + "x)";
+
+            thisPlayerHand.forEach(c -> {
+                c.entity.defaultFaceBorderColor.set(0, 0, 0, 1);
+                c.entity.resetFaceBorderThickness();
+                c.entity.resetFaceBackgroundColor();
+            });
         }
 
         // --- KITTY CALLING CODES ---
         private void noOneCalled() {
             message = "No one called. Now drawing cards from the kitty.";
+
+            thisPlayerHand.forEach(c -> {
+                c.entity.defaultFaceBorderColor.set(0, 0, 0, 1);
+                c.entity.resetFaceBorderThickness();
+                c.entity.resetFaceBackgroundColor();
+            });
         }
 
         private void waitForKittyCard() {
-            kitty.add(new RenderableShengJiCard((Integer)data.get("cardnum"), ClientGameState.this));
+            var newKittyCard = new RenderableShengJiCard((Integer)data.get("cardnum"), ClientGameState.this);
+            kitty.add(newKittyCard);
+            if(!newKittyCard.isJoker()) {
+                kitty.forEach(c -> {
+                    c.entity.resetFaceBackgroundColor();
+                    c.entity.resetFaceBorderColor();
+                    c.entity.resetFaceBorderThickness();
+                });
+                newKittyCard.entity.setFaceBorderThicknessRelativeToWidth(0.036f);
+                newKittyCard.entity.setFaceBorderColor(effectiveKittyCardBorderColor);
+                newKittyCard.entity.setFaceBackgroundColor(effectiveKittyCardBackgroundColor);
+            }
         }
 
         private void makeKittyCall() {
-            // Nothing needs to be done here?
+            players.forEach(p -> p.setNameColor(null));
         }
 
         private void invalidKittyCall() {
@@ -457,7 +509,7 @@ public class ClientGameState extends ShengJiGameState {
         }
 
         private void unsuccessfulKittyCall() {
-            errorMessage = "[YELLOW]Somebody already called. (Is the host/your client lagging?)";
+            errorMessage = (data.get("message") != null) ? (String)data.get("message") : "";
             thisPlayerHand.addAll(thisPlayer.getPlay());
             thisPlayer.clearPlay();
         }
@@ -476,9 +528,10 @@ public class ClientGameState extends ShengJiGameState {
                             "no player found with player num " + data.get("playernum") +
                             "sent by server for callWinner"
                     ));
-            Card callCard = new Card((Integer)data.get("callcardnum"));
+            Rank trumpRank = (Rank)data.get("trumprank");
+            Suit trumpSuit = (Suit)data.get("trumpsuit");
 
-            setTrump(callWinner.getCallRank(), callCard.getSuit());
+            setTrump(trumpRank, trumpSuit);
             callWinner.setTeam(Team.KEEPERS);
             callWinner.setNameColor(getTeamNameColor(Team.KEEPERS));
 
@@ -495,7 +548,7 @@ public class ClientGameState extends ShengJiGameState {
             } else {
                 message = callWinner.getColoredName() + " ";
             }
-            message += "won the call with " + callCard.toAbbrevString();
+            message += "claimed the call";
         }
 
         private void kittyExhaustedRedeal() {
@@ -504,7 +557,21 @@ public class ClientGameState extends ShengJiGameState {
             thisPlayerHand.clear();
             thisPlayerCurrentCall.clear();
             kitty.clear();
-            players.forEach(RenderablePlayer::clearCards);
+            players.forEach(p -> {
+                p.clearCards();
+                p.setNameColor(null);
+            });
+        }
+
+        private void waitForNoCallPlayer() {
+            var noCallPlayer = getPlayerByNum((Integer)data.get("player"))
+                    .orElseThrow(() -> new InvalidServerPacketException(
+                            "waitForNoCallPlayer() - No player found with player num " +
+                                    data.get("player") +
+                                    " sent by server for noCallPlayer"
+            ));
+
+            noCallPlayer.setNameColor(noCallPlayerNameColor);
         }
 
         private void waitingOnCaller() {
@@ -543,10 +610,21 @@ public class ClientGameState extends ShengJiGameState {
 
         // --- FRIEND CARDS CODES ---
         private void waitForFriendCards() {
-            friendCards.clear();
-            friendCards.addAll(CardList.fromCardNumList(
-                    (List<Integer>)data.get("cardnums"),
-                    cardNum -> new RenderableShengJiCard(cardNum, ClientGameState.this)));
+            var newFriendCardNums = (List<Integer>)data.get("cardnums");
+
+            if(!friendCards.toCardNumList().equals(newFriendCardNums)) {
+                friendCards.clear();
+                friendCards.addAll(CardList.fromCardNumList(
+                        newFriendCardNums,
+                        cardNum -> new RenderableShengJiCard(cardNum, ClientGameState.this)));
+            } else {
+                friendCards.forEach(c -> {
+                    c.entity.setHighlighted(false);
+                    c.entity.resetBothBorderThicknesses();
+                    c.entity.resetBothBackgroundColors();
+                    c.entity.resetBothBorderColors();
+                });
+            }
 
             if(friendCards.size() == 0) {
                 players.stream().filter(p -> p.getTeam() == Team.NO_TEAM).forEach(p -> {
@@ -612,6 +690,7 @@ public class ClientGameState extends ShengJiGameState {
                             "waitForTurnPlayer() - No player found with player num "
                                     + data.get("player")
                                     + " sent by server for turn player"));
+            turnPlayer.setPlayerNumColorString(turnPlayerNameColor);
             message = "It's "
                     + "P" + turnPlayer.getPlayerNum() + ": " + turnPlayer.getColoredName()
                     + (turnPlayer.getName().charAt(turnPlayer.getName().length() - 1) == 's' ? "'" : "'s") // Pluralizing
@@ -632,7 +711,7 @@ public class ClientGameState extends ShengJiGameState {
                             "turnOver() - No player found with player num "
                                     + data.get("player")
                                     + " sent by server for leadingPlayer"));
-            List<Integer> invalidatedFriendCards = (List<Integer>)data.get("invalidatedfriendcards");
+            List<Integer> invalidatedFriendCardNums = (List<Integer>)data.get("invalidatedfriendcards");
             Map<Integer, Team> teamsMap = (Map<Integer, Team>)data.get("teamsmap");
 
             for(var playerNum : teamsMap.keySet()) {
@@ -645,6 +724,10 @@ public class ClientGameState extends ShengJiGameState {
                 p.setTeam(team);
                 p.setNameColor(getTeamNameColor(team));
                 if(team == Team.COLLECTORS) {
+                    p.getPointCards().forEach(c -> {
+                        c.entity.resetBothBorderColors();
+                        c.entity.resetBothBackgroundColors();
+                    });
                     collectedPointCards.addAll(p.getPointCards());
                     numCollectedPoints = collectedPointCards.stream().mapToInt(ShengJiCard::getPoints).sum();
                     p.getPointCards().clear();
@@ -653,17 +736,13 @@ public class ClientGameState extends ShengJiGameState {
                 }
             }
 
-            for(int invalidatedFriendCardNum : invalidatedFriendCards) {
-                friendCards.stream()
-                        .filter(c -> c.getCardNum() == invalidatedFriendCardNum)
-                        .findFirst()
-                        .ifPresent(c -> {
-                            c.entity.defaultFaceBackgroundColor.set(invalidatedFriendCardBackgroundColor);
-                            c.entity.defaultFaceBorderColor.set(invalidatedFriendCardBorderColor);
-                            c.entity.resetFaceBackgroundColor();
-                            c.entity.resetFaceBackgroundColor();
-                        });
-            }
+            friendCards.forEach(c -> {
+                if(invalidatedFriendCardNums.contains(c.getCardNum())) {
+                    c.entity.setFaceBackgroundColor(invalidatedFriendCardBackgroundColor);
+                    c.entity.setFaceBorderColor(invalidatedFriendCardBorderColor);
+                    invalidatedFriendCardNums.remove(Integer.valueOf(c.getCardNum()));
+                }
+            });
 
             if(player != thisPlayer) {
                 pointCardsInTrick.addAll(play.stream()
@@ -685,14 +764,18 @@ public class ClientGameState extends ShengJiGameState {
 
             if(players.stream().filter(p -> !p.getPlay().isEmpty()).count() == 1) {
                 player.getPlay().forEach(c -> {
-                    c.entity.defaultFaceBackgroundColor.set(basePlayColor);
-                    c.entity.resetFaceBackgroundColor();
+                    c.entity.setFaceBackgroundColor(basePlayColor);
                 });
+                basePlayer = player;
+            } else if(basePlayer != null) {
+                basePlayer.getPlay().forEach(c -> c.entity.setFaceBackgroundColor(basePlayColor));
             }
-
-
-            players.forEach(p -> p.getPlay().forEach(c -> c.entity.resetFaceBackgroundColor()));
+            players.stream()
+                    .filter(p -> p != basePlayer)
+                    .forEach(p -> p.getPlay().forEach(c -> c.entity.resetFaceBackgroundColor()));
             leadingPlayer.getPlay().forEach(c -> c.entity.setFaceBackgroundColor(winningPlayColor));
+
+            player.setPlayerNumColorString(null);
         }
 
         private void trickEnd() {
@@ -703,6 +786,7 @@ public class ClientGameState extends ShengJiGameState {
                                     + " sent by server for trick winner"
                     ));
             leadingPlayer = trickWinner;
+            basePlayer = null;
 
             if(!pointCardsInTrick.isEmpty()) {
                 pointCardsInTrick.forEach(c -> {
@@ -714,6 +798,10 @@ public class ClientGameState extends ShengJiGameState {
                     trickWinner.getPointCards().addAll(pointCardsInTrick);
                     trickWinner.getPointCards().sort(ShengJiCard::compareTo);
                 } else if(trickWinner.getTeam() == Team.COLLECTORS) {
+                    pointCardsInTrick.forEach(c -> {
+                        c.entity.resetBothBorderColors();
+                        c.entity.resetBothBackgroundColors();
+                    });
                     collectedPointCards.addAll(pointCardsInTrick);
                     numCollectedPoints = collectedPointCards.stream().mapToInt(ShengJiCard::getPoints).sum();
                     collectedPointCards.sort(ShengJiCard::compareTo);
@@ -784,13 +872,14 @@ public class ClientGameState extends ShengJiGameState {
             winningPlayers.forEach(p -> p.increaseCallRank(rankIncrease));
 
             message = String.format("Round over! %s win and go up by %d.\n" +
-                     "%sCollectors[] got (%d + %d*%d) = [BLUE]%d[] points.\n",
+                            "%sCollectors[] got (%d + %d*%d) = %s%d[] points.\n",
                     getTeamNameColorString(winningTeam) + winningTeam.toString() + "[]",
                     rankIncrease,
                     getTeamNameColorString(Team.COLLECTORS),
                     collectedPointsBeforeKitty,
                     kittyPointsMultiplier,
                     kittyPoints,
+                    getColorString(finalCollectedPointsTextColor),
                     totalCollectedPoints);
             message += "Winners:\n" + winningPlayers.stream()
                     .map(p -> p.getColoredName() + " (" + p.getCallRank().toAbbrevString() + ")")
@@ -823,10 +912,10 @@ public class ClientGameState extends ShengJiGameState {
     private static String getColorString(Color color) {
         if(color != null) {
             return "[#"
-                    + Integer.toHexString((int)(color.r * 255))
-                    + Integer.toHexString((int)(color.g * 255))
-                    + Integer.toHexString((int)(color.b * 255))
-                    + Integer.toHexString((int)(color.a * 255))
+                    + color.toString().substring(0, 2)
+                    + color.toString().substring(2, 4)
+                    + color.toString().substring(4, 6)
+                    + color.toString().substring(6, 8)
                     + "]";
         } else {
             return "";
@@ -836,29 +925,42 @@ public class ClientGameState extends ShengJiGameState {
     public void setTrump(Rank rank, Suit suit) {
         trumpRank = rank;
         trumpSuit = suit;
+        trumpCardGroup.clear();
         if(trumpRank != null && trumpSuit != null) {
-            trumpCard = new RenderableShengJiCard(rank, suit, this);
-        } else {
-            trumpCard = null;
+            if(trumpSuit == Suit.JOKER) {
+                trumpCardGroup.add(new RenderableShengJiCard(rank, Suit.SPADES, ClientGameState.this));
+                trumpCardGroup.add(new RenderableShengJiCard(rank, Suit.HEARTS, ClientGameState.this));
+                trumpCardGroup.add(new RenderableShengJiCard(rank, Suit.CLUBS, ClientGameState.this));
+                trumpCardGroup.add(new RenderableShengJiCard(rank, Suit.DIAMONDS, ClientGameState.this));
+            } else {
+                trumpCardGroup.add(new RenderableShengJiCard(rank, suit, this));
+            }
         }
+
         thisPlayerHand.sort(ShengJiCard::compareTo);
     }
 
     public final class Actions {
+        private ClientConnection client;
+
         private Actions() {
 
         }
 
-        public void sendCall(ClientConnection client) {
+        private boolean establishClient() {
+            client = game.getClientConnection();
+            return client != null;
+        }
+
+        public void sendCall() {
+            if(!establishClient()) {
+                return;
+            }
+
             RenderableCardList<RenderableShengJiCard> selectedCards = thisPlayerHand.stream()
                     .filter(RenderableShengJiCard::isSelected)
                     .collect(Collectors.toCollection(RenderableCardList::new));
-            if(selectedCards.size() == 0) {
-                try {
-                    client.sendCode(ClientCode.NO_CALL);
-                } catch(IOException e) {
-                    errorMessage = "[Yellow]There was an error while trying to contact the server. Did you lose connection?[]";
-                }
+            if(selectedCards.isEmpty()) {
                 return;
             }
 
@@ -868,10 +970,13 @@ public class ClientGameState extends ShengJiGameState {
             }
 
             int callOrder = selectedCards.size();
-            if(!thisPlayer.getPlay().isEmpty() && selectedCards.get(0).getSuit() == thisPlayer.getPlay().get(0).getSuit()) {
-                callOrder += thisPlayer.getPlay().size();
-            } else {
-                thisPlayer.getPlay().clear();
+            if(!thisPlayer.getPlay().isEmpty()) {
+                if(selectedCards.get(0).getSuit() == thisPlayer.getPlay().get(0).getSuit()) {
+                    callOrder += thisPlayer.getPlay().size();
+                } else {
+                    errorMessage = "[YELLOW]Your play is being validated by the server...[]";
+                    return;
+                }
             }
 
             try {
@@ -880,13 +985,29 @@ public class ClientGameState extends ShengJiGameState {
                         .put("order", callOrder));
                 thisPlayer.getPlay().addAll(selectedCards);
                 thisPlayerHand.removeAll(selectedCards);
-                selectedCards.forEach(c -> c.setSelected(false));
+                selectedCards.forEach(c -> c.setSelected(false).setHighlighted(false));
             } catch(IOException e) {
                 errorMessage = "[Yellow]There was an error while trying to contact the server. Did you lose connection?[]";
             }
         }
 
-        public void sendKittyCall(ClientConnection client) {
+        public void sendNoCall() {
+            if(!establishClient()) {
+                return;
+            }
+
+            try {
+                client.sendCode(ClientCode.NO_CALL);
+            } catch(IOException e) {
+                errorMessage = "[Yellow]There was an error while trying to contact the server. Did you lose connection?[]";
+            }
+        }
+
+        public void sendKittyCall() {
+            if(!establishClient()) {
+                return;
+            }
+
             try {
                 client.sendCode(ClientCode.KITTY_CALL);
             } catch(IOException e) {
@@ -894,7 +1015,23 @@ public class ClientGameState extends ShengJiGameState {
             }
         }
 
-        public void sendKitty(ClientConnection client) {
+        public void sendNoKittyCall() {
+            if(!establishClient()) {
+                return;
+            }
+
+            try {
+                client.sendCode(ClientCode.NO_KITTY_CALL);
+            } catch(IOException e) {
+                errorMessage = "[Yellow]There was an error while trying to contact the server. Did you lose connection?[]";
+            }
+        }
+
+        public void sendKitty() {
+            if(!establishClient()) {
+                return;
+            }
+
             if(!lastAttemptedKitty.isEmpty()) {
                 errorMessage = "[YELLOW]Your kitty is being validated by the server...[]";
                 return;
@@ -917,7 +1054,11 @@ public class ClientGameState extends ShengJiGameState {
             }
         }
 
-        public void sendFriendCards(ClientConnection client) {
+        public void sendFriendCards() {
+            if(!establishClient()) {
+                return;
+            }
+
             try {
                 client.sendPacket(new ClientPacket(ClientCode.FRIEND_CARDS).put("friendcards", friendCards.toCardNumList()));
             } catch(IOException e) {
@@ -925,7 +1066,11 @@ public class ClientGameState extends ShengJiGameState {
             }
         }
 
-        public void sendPlay(ClientConnection client) {
+        public void sendPlay() {
+            if(!establishClient()) {
+                return;
+            }
+
             // This else/if prevents the player from making two plays in quick succession,
             // which would overwrite thisPlayer.getPlay() and would send the server both plays.
             // The server might accept the first play, but on the client side the first play would have been overwritten
@@ -948,7 +1093,7 @@ public class ClientGameState extends ShengJiGameState {
                 client.sendPacket(new ClientPacket(ClientCode.PLAY).put("play", selectedCards.toCardNumList()));
                 thisPlayer.getPlay().addAll(selectedCards);
                 thisPlayerHand.removeAll(selectedCards);
-                selectedCards.forEach(c -> c.setSelected(false));
+                selectedCards.forEach(c -> c.setSelected(false).setHighlighted(false));
             } catch(IOException e) {
                 errorMessage = "[YELLOW]There was an error while trying to contact the server. Did you lose connection?[]";
             }

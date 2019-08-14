@@ -130,10 +130,12 @@ public class ShengJiGame extends Game {
 
     public void closeGameServer() {
         if(server != null) {
-            new Thread(() -> UPnP.closePortTCP(server.port)).start();
             server.close();
-            server = null;
             successfullyOpenedServerPort = false;
+            new Thread(() -> {
+                UPnP.closePortTCP(server.port);
+                server = null;
+            }).start();
         }
     }
 

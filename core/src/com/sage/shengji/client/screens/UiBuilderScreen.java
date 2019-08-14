@@ -24,7 +24,6 @@ import com.sage.shengji.utils.card.Rank;
 import com.sage.shengji.utils.card.Suit;
 import com.sage.shengji.utils.renderable.RenderableCardEntity;
 import com.sage.shengji.utils.renderable.RenderableCardGroup;
-import com.sage.shengji.utils.shengji.ShengJiCard;
 
 import java.util.*;
 
@@ -38,10 +37,10 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
     private Viewport viewport;
     private float viewportScale = 5f;
     private float textProportion = 1 / 7f;
-    private float originalTextSize = 0;
 
     private Stage uiStage;
     private TextButton actionButton;
+    private TextButton noCallButton;
 
     private FreeTypeFontGenerator fontGenerator;
     private FreeTypeFontGenerator.FreeTypeFontParameter textButtonFontParameter;
@@ -63,14 +62,12 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
     private float playersCenterXProportion = 0.50f;
     private float playersCenterYProportion = 0.70f;
 
-    private float playersWidthRadiusProportion = 0.40f;
+    private float playersWidthRadiusProportion = 0.45f;
     private float playersHeightRadiusProportion = 0.19f;
 
     private boolean renderChoosingFriendCards = false;
     private boolean renderRoundEndKitty = false;
     private boolean renderCallKitty = false;
-
-    private RenderableCardGroup<RenderableShengJiCard> trumpCardGroup = new RenderableCardGroup<>();
 
     public UiBuilderScreen(ShengJiGame game) {
         this.game = game;
@@ -90,7 +87,6 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
 
     private void fontSetup() {
         int textSize = (int)(Math.max(Gdx.graphics.getHeight(), Gdx.graphics.getWidth()) * textProportion);
-        originalTextSize = textSize;
 
         fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/OpenSans-Regular.ttf"));
 
@@ -137,7 +133,7 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         kittyFont = fontGenerator.generateFont(kittyFontParameter);
 
         var playerNameFontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        playerNameFontParameter.size = textSize;
+        playerNameFontParameter.size = (int)(textSize * 0.8f);
         playerNameFontParameter.incremental = true;
         playerNameFont = fontGenerator.generateFont(playerNameFontParameter);
         playerNameFont.getData().markupEnabled = true;
@@ -154,9 +150,13 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         actionButton = new TextButton("Send play", actionButtonStyle);
         actionButton.setProgrammaticChangeEvents(true);
 
+        noCallButton = new TextButton("No call", actionButtonStyle);
+        noCallButton.setProgrammaticChangeEvents(true);
+
         // Adding UI elements to stage:
         uiStage = new Stage(viewport, batch);
         uiStage.addActor(actionButton);
+        uiStage.addActor(noCallButton);
     }
 
     private void inputProcessorsSetup() {
@@ -178,7 +178,7 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         gameState.players.clear();
         gameState.players.add(new RenderablePlayer(0, "This player"));
         gameState.thisPlayer = gameState.players.get(0);
-        for(int i = 1; i < 8; i++) {
+        for(int i = 1; i < 10; i++) {
             gameState.players.add(new RenderablePlayer(i, "Player " + i));
         }
 
@@ -231,8 +231,6 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         gameState.numPointsNeeded = 160;
 
         gameState.setTrump(Rank.FIVE, Suit.HEARTS);
-        trumpCardGroup.clear();
-        trumpCardGroup.add(gameState.trumpCard);
 
         gameState.thisPlayerHand.clear();
         for(int i = 0; i < 26; i++) {
@@ -290,12 +288,22 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
                 0, Align.center, false);
         batch.end();
 
-        actionButton.setWidth(viewport.getWorldWidth() * 0.2f);
-        actionButton.setHeight(gameState.thisPlayerHand.pos.y * 0.9f);
-        actionButton.setPosition(
-                viewport.getWorldWidth() / 2,
-                gameState.thisPlayerHand.pos.y / 2,
-                Align.center);
+        if(!actionButton.isDisabled()) {
+            actionButton.setWidth(viewport.getWorldWidth() * 0.4f);
+            actionButton.setHeight(gameState.thisPlayerHand.pos.y * 0.8f);
+            actionButton.setPosition(
+                    viewport.getWorldWidth() / 2,
+                    gameState.thisPlayerHand.pos.y / 2,
+                    Align.center);
+        }
+        if(!noCallButton.isDisabled()) {
+            noCallButton.setWidth(gameState.friendCards.regionWidth * 0.8f);
+            noCallButton.setHeight(gameState.thisPlayerHand.pos.y * 0.8f);
+            noCallButton.setPosition(
+                    gameState.friendCards.pos.x + (gameState.friendCards.regionWidth / 2),
+                    gameState.friendCards.pos.y / 2,
+                    Align.center);
+        }
         uiStage.draw();
     }
 
@@ -321,16 +329,13 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
     }
 
     private void renderFriendCardsForChoosing() {
-        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.17f;
         gameState.friendCards.prefDivisionProportion = 1.1f;
-
+        gameState.friendCards.cardHeight = viewport.getWorldHeight() * 0.17f;
         gameState.friendCards.regionWidth =
-                (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * gameState.friendCards.cardHeight) * 4;
-
+                (RenderableCardEntity.WIDTH_TO_HEIGHT_RATIO * gameState.friendCards.cardHeight) * 5;
         gameState.friendCards.setPos(
-                (viewport.getWorldWidth() - gameState.friendCards.regionWidth) * 0.5f,
-                gameState.thisPlayerHand.pos.y + (gameState.thisPlayerHand.cardHeight * 2)
-        );
+                (viewport.getWorldWidth() * playersCenterXProportion) - (gameState.friendCards.regionWidth * 0.5f),
+                (viewport.getWorldHeight() * playersCenterYProportion) - (gameState.friendCards.cardHeight * 0.7f));
 
         gameState.friendCards.render(batch, viewport);
     }
@@ -350,15 +355,15 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
     }
 
     private void renderTrumpCard() {
-        trumpCardGroup.cardHeight = gameState.thisPlayerHand.cardHeight;
-        trumpCardGroup.regionWidth = gameState.thisPlayerHand.pos.x;
-        trumpCardGroup.setPos(0, gameState.thisPlayerHand.pos.y);
-        trumpCardGroup.render(batch, viewport);
+        gameState.trumpCardGroup.cardHeight = gameState.thisPlayerHand.cardHeight;
+        gameState.trumpCardGroup.regionWidth = gameState.thisPlayerHand.pos.x;
+        gameState.trumpCardGroup.setPos(0, gameState.thisPlayerHand.pos.y);
+        gameState.trumpCardGroup.render(batch, viewport);
 
         trumpCardFont.setColor(Color.GOLD);
         trumpCardFont.draw(batch, "Trump",
-                trumpCardGroup.pos.x + (trumpCardGroup.regionWidth * 0.5f),
-                trumpCardGroup.pos.y + (trumpCardFont.getXHeight() * 2) + trumpCardGroup.cardHeight,
+                gameState.trumpCardGroup.pos.x + (gameState.trumpCardGroup.regionWidth * 0.5f),
+                gameState.trumpCardGroup.pos.y + (trumpCardFont.getXHeight() * 2) + gameState.trumpCardGroup.cardHeight,
                 0, Align.center, false);
         trumpCardFont.setColor(Color.WHITE);
     }
@@ -427,7 +432,7 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         gameState.players.stream().filter(Objects::nonNull).forEach(p -> p.update(delta));
         gameState.friendCards.update(delta);
         gameState.kitty.update(delta);
-        gameState.trumpCard.update(delta);
+        gameState.trumpCardGroup.update(delta);
         gameState.collectedPointCards.update(delta);
     }
 
@@ -436,16 +441,16 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         float angleIncrement = MathUtils.PI2 / players.size();
         float shift = (players.indexOf(gameState.thisPlayer) * angleIncrement) + (MathUtils.PI * 0.5f);
 
+        float[][] playerPointsXY = equidistantEllipsePoints(widthRadius, heightRadius, -shift, centerX, centerY, players.size());
         List<RenderablePlayer> expandedPlayers = new ArrayList<>();
 
-        for(int i = 0; i < players.size(); i++) {
-            RenderablePlayer toRender = players.get(i);
+        for(int i = 0; i < playerPointsXY.length; i++) {
+            var toRender = players.get(i);
             if(toRender == null) {
                 continue;
             }
 
-            toRender.setX((MathUtils.cos((i * angleIncrement) - shift) * widthRadius) + centerX);
-            toRender.setY((MathUtils.sin((i * angleIncrement) - shift) * heightRadius) + centerY);
+            toRender.setPos(playerPointsXY[i][0], playerPointsXY[i][1]);
 
             if(toRender.isExpanded()) {
                 expandedPlayers.add(toRender);
@@ -468,6 +473,59 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
             debugRenderer.end();
             batch.begin();
         }
+    }
+
+    // Code taken from https://stackoverflow.com/a/20510150.
+    // AAAAAAHHHHHH THANK YOU DAVE, I LOVE YOU AAAAAAHHHH!!!!!!!!!
+    private static float[][] equidistantEllipsePoints(float r1, float r2, float thetaShift, float centerX, float centerY, int numPoints) {
+        float[][] pointsXY = new float[numPoints][2];
+        double theta = 0.0;
+        double deltaTheta = 0.0001;
+        double circumference = 0.0;
+        double numIntegrals = Math.round(MathUtils.PI2 / deltaTheta);
+        double dpt;
+
+        /* integrate over the ellipse to get the circumference */
+        for(int i = 0; i < numIntegrals; i++) {
+            theta += i * deltaTheta;
+            dpt = computeDpt(r1, r2, theta);
+            circumference += dpt;
+        }
+
+        int pointIdx = 0;
+        double run = 0.0;
+        theta = thetaShift;
+
+        for(int i = 0; i < numIntegrals; i++) {
+            theta += deltaTheta;
+            double subIntegral = numPoints * run / circumference;
+            if((int)subIntegral >= pointIdx) {
+                if(pointIdx >= pointsXY.length) {
+                    break;
+                }
+
+                double x = (r1 * Math.cos(theta)) + centerX;
+                double y = (r2 * Math.sin(theta)) + centerY;
+
+                pointsXY[pointIdx][0] = (float)x;
+                pointsXY[pointIdx][1] = (float)y;
+
+                pointIdx++;
+            }
+            run += computeDpt(r1, r2, theta);
+        }
+
+        return pointsXY;
+    }
+
+    private static float computeDpt(double r1, double r2, double theta) {
+        double dp;
+
+        double dpt_sin = Math.pow(r1 * Math.sin(theta), 2.0);
+        double dpt_cos = Math.pow(r2 * Math.cos(theta), 2.0);
+        dp = Math.sqrt(dpt_sin + dpt_cos);
+
+        return (float)dp;
     }
 
     @Override
@@ -558,6 +616,29 @@ public class UiBuilderScreen extends InputAdapter implements Screen {
         case Input.Keys.D:
             RenderableCardGroup.setDebug(!RenderableCardGroup.isInDebugMode());
             break;
+
+        case Input.Keys.MINUS:
+            if(gameState.players.size() > 1) {
+                gameState.players.remove(gameState.players.size() - 1);
+            }
+            break;
+
+        case Input.Keys.EQUALS:
+            if(gameState.players.size() < 10) {
+                gameState.players.add(new RenderablePlayer(gameState.players.size(), "Player " + gameState.players.size()));
+                gameState.players.get(gameState.players.size() - 1).getPlay().addAll(List.of(
+                        new RenderableShengJiCard(Rank.SMALL_JOKER, Suit.JOKER, gameState),
+                        new RenderableShengJiCard(Rank.SMALL_JOKER, Suit.JOKER, gameState),
+                        new RenderableShengJiCard(Rank.BIG_JOKER, Suit.JOKER, gameState),
+                        new RenderableShengJiCard(Rank.BIG_JOKER, Suit.JOKER, gameState)));
+                gameState.players.get(gameState.players.size() - 1).getPointCards().addAll(List.of(
+                        new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                        new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                        new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                        new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                        new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState),
+                        new RenderableShengJiCard(Rank.KING, Suit.SPADES, gameState)));
+            }
         }
 
         return false;

@@ -164,7 +164,16 @@ public class Server extends Thread {
         player.setInitialPacketHandlerForCode(ClientCode.SHUFFLE_PLAYERS, packet -> {
             if(player == host) {
                 try {
-                    gameState.shufflePlayers();
+                    var oldPlayerOrder = gameState.getPlayers();
+                    final int maxAttempts = 20;
+                    int i = 0;
+                    if(oldPlayerOrder.size() <= 1) {
+                        return false;
+                    }
+
+                    do {
+                        gameState.shufflePlayers();
+                    } while(oldPlayerOrder.equals(gameState.getPlayers()) && i++ < maxAttempts);
                 } catch(RoundIsRunningException e) {
                     return false;
                 }
@@ -190,8 +199,8 @@ public class Server extends Thread {
         try {
             // We drop every player connection which should (?) make RoundRunner.playRound() throw a PlayerDisconnectedException.
             // When the main server loop repeats, it will query the value of closed and will exit.
-            gameState.getPlayers().forEach(Player::dropConnection);
             closed = true;
+            gameState.getPlayers().forEach(Player::dropConnection);
 
             // We need to notify startRoundObj in case the server is currently waiting for the round to start
             synchronized(startRoundObj) {
