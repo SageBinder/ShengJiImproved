@@ -88,7 +88,7 @@ public class ServerGameState extends ShengJiGameState {
     }
 
     boolean isLegalCall(Player p, ShengJiCard call, int order) {
-        return p.hand.stream().filter(c -> c.getCardNum() == call.getCardNum()).count() <= order
+        return p.hand.stream().filter(c -> c.getCardNum() == call.getCardNum()).count() >= order
                 && call.getRank() == p.getCallRank();
     }
 

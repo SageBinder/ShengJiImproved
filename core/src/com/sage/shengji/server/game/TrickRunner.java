@@ -100,9 +100,12 @@ class TrickRunner {
     }
 
     private static CardList<ShengJiCard> setTeamsAndInvalidateFriendCardsFromLastPlay(ServerGameState gameState) {
+        if(gameState.turnPlayer == gameState.caller) {
+            return new CardList<>();
+        }
+
         Play lastPlay = gameState.turnPlayer.play;
         CardList<ShengJiCard> invalidatedFriendCards;
-
         if(!(invalidatedFriendCards = gameState.friendCards.removeAllByValueAndGet(lastPlay)).isEmpty()) {
             gameState.turnPlayer.setTeam(Team.KEEPERS);
             gameState.turnPlayer.pointCards.clear(); // Once a player becomes a keeper, their points are discarded

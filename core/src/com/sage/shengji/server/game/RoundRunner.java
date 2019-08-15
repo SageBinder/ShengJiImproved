@@ -230,6 +230,12 @@ public class RoundRunner {
             throw new FatalRoundException("THIS IS BAD: updateRanksAndGetRoundEndPacket(), gameState.leadingPlayer == null || gameState.leadingPlayer.play == null");
         }
 
+        gameState.players.stream().filter(p -> p.getTeam() == Team.NO_TEAM).forEach(p -> p.setTeam(Team.COLLECTORS));
+        gameState.players.stream().filter(p -> p.getTeam() == Team.COLLECTORS).forEach(p -> {
+            gameState.collectedPointCards.addAll(p.pointCards);
+            p.pointCards.clear();
+        });
+
         int pointsInKitty = gameState.kitty.stream().mapToInt(ShengJiCard::getPoints).sum();
         int collectedPointsBeforeKitty = gameState.collectedPointCards.stream().mapToInt(ShengJiCard::getPoints).sum();
         int kittyPointsMultiplier = gameState.leadingPlayer.play.size() + 1;

@@ -378,9 +378,13 @@ public class ClientGameState extends ShengJiGameState {
         private void unsuccessfulCall() {
             errorMessage = "[YELLOW]Call not strong enough";
 
+            System.out.println("thisPlayer.getPlay() = " + thisPlayer.getPlay().stream().map(Card::toAbbrevString).collect(Collectors.joining(", ")));
+            System.out.println("thisPlayerCurrentCall = " + thisPlayerCurrentCall.stream().map(Card::toAbbrevString).collect(Collectors.joining(", ")));
             thisPlayerHand.addAll(thisPlayer.getPlay());
             thisPlayer.clearPlay();
             thisPlayer.getPlay().addAll(thisPlayerCurrentCall);
+            thisPlayerHand.removeAll(thisPlayerCurrentCall);
+            System.out.println("thisPlayer.getPlay() = " + thisPlayer.getPlay().stream().map(Card::toAbbrevString).collect(Collectors.joining(", ")));
         }
 
         private void invalidCall() {
@@ -864,6 +868,12 @@ public class ClientGameState extends ShengJiGameState {
                     .collect(Collectors.toCollection(ArrayList::new));
             int kittyPoints = kittyCards.stream().mapToInt(ShengJiCard::getPoints).sum();
 
+            players.stream().filter(p -> p.getTeam() == Team.NO_TEAM).forEach(p -> p.setTeam(Team.COLLECTORS));
+            players.stream().filter(p -> p.getTeam() == Team.COLLECTORS).forEach(p -> {
+                collectedPointCards.addAll(p.getPointCards());
+                p.getPointCards().clear();
+            });
+
             numCollectedPoints = totalCollectedPoints;
 
             kitty.clear();
@@ -974,8 +984,10 @@ public class ClientGameState extends ShengJiGameState {
                 if(selectedCards.get(0).getSuit() == thisPlayer.getPlay().get(0).getSuit()) {
                     callOrder += thisPlayer.getPlay().size();
                 } else {
-                    errorMessage = "[YELLOW]Your play is being validated by the server...[]";
-                    return;
+                    thisPlayerHand.addAll(thisPlayer.getPlay());
+                    thisPlayer.getPlay().clear();
+//                    errorMessage = "[YELLOW]Your play is being validated by the server...[]";
+//                    return;
                 }
             }
 
@@ -1091,6 +1103,8 @@ public class ClientGameState extends ShengJiGameState {
             }
             try {
                 client.sendPacket(new ClientPacket(ClientCode.PLAY).put("play", selectedCards.toCardNumList()));
+                thisPlayerHand.addAll(thisPlayer.getPlay());
+                thisPlayer.getPlay().clear();
                 thisPlayer.getPlay().addAll(selectedCards);
                 thisPlayerHand.removeAll(selectedCards);
                 selectedCards.forEach(c -> c.setSelected(false).setHighlighted(false));
