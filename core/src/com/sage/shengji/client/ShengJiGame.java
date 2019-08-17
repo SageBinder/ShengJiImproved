@@ -93,8 +93,8 @@ public class ShengJiGame extends Game {
         return backgroundTexture;
     }
 
-    public void joinGame(String serverIP, int port, String name) {
-        clientConnection = new ClientConnection(serverIP, port, name, this);
+    public void joinGame(String serverIP, int port, String name, boolean connectedAsHost) {
+        clientConnection = new ClientConnection(serverIP, port, name, connectedAsHost, this);
         clientConnection.start();
         ClientPacket namePacket = new ClientPacket(ClientCode.NAME);
         namePacket.data.put("name", name);

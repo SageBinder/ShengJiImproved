@@ -158,7 +158,7 @@ public class JoinGameScreen implements Screen, InputProcessor {
                 }
 
                 try {
-                    game.joinGame(ip, port, name);
+                    game.joinGame(ip, port, name, false);
                 } catch(Exception e) {
                     errorLabel.setText("[RED]Error: couldn't connect to Hearts game hosted on [][CYAN]" + ip + "[]:[ORANGE]" + port);
                     return;

@@ -93,18 +93,24 @@ public class CreateGameScreen implements Screen, InputProcessor {
         screenHeaderLabel = new Label("Create game", labelStyle);
 
         ipLabel = new Label("Determining your IP...", labelStyle);
-        ipLabel.setAlignment(Align.center);
-        new Thread(() -> {
-            try {
-                String thisMachineIP =
-                        new BufferedReader(
-                                new InputStreamReader(
-                                        new URL("https://api.ipify.org").openStream())).readLine();
-                ipLabel.setText("Your IP: [CYAN]" + thisMachineIP);
-            } catch(IOException e) {
-                ipLabel.setText("[YELLOW]Error: could not determine your IP");
+        Net.HttpRequest httpGet = new Net.HttpRequest(Net.HttpMethods.GET);
+        httpGet.setUrl("https://api.ipify.org");
+        Gdx.net.sendHttpRequest(httpGet, new Net.HttpResponseListener() {
+            @Override
+            public void handleHttpResponse(Net.HttpResponse httpResponse) {
+                ipLabel.setText("Your IP: [CYAN]" + httpResponse.getResultAsString() + "[]");
             }
-        }).start();
+
+            @Override
+            public void failed(Throwable t) {
+                ipLabel.setText("[YELLOW]Could not determine your IP[]");
+            }
+
+            @Override
+            public void cancelled() {
+                ipLabel.setText("[YELLOW]Could not determine your IP[]");
+            }
+        });
 
         nameField = new TextField("", textFieldStyle);
         nameField.setMessageText("Name");
@@ -157,7 +163,7 @@ public class CreateGameScreen implements Screen, InputProcessor {
 
                 try {
                     game.startGameServer(port);
-                    game.joinGame("127.0.0.1", port, name);
+                    game.joinGame("127.0.0.1", port, name, true);
                 } catch(GdxRuntimeException e) {
                     errorLabel.setText("[RED]Error: " + e.getMessage() + "\nMaybe try a different port?");
                     game.closeGameServer();

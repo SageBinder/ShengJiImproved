@@ -23,10 +23,7 @@ import com.sage.shengji.client.network.ClientCode;
 import com.sage.shengji.client.network.ClientConnection;
 import com.sage.shengji.client.network.ClientPacket;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URL;
 import java.util.Objects;
 
 public class LobbyScreen implements Screen, InputProcessor {
@@ -57,7 +54,7 @@ public class LobbyScreen implements Screen, InputProcessor {
 
     private FreeTypeFontGenerator fontGenerator;
 
-    private final Color hostColor = new Color(1f, 1f, 0f, 1f);
+    private final Color thisPlayerColor = new Color(1f, 1f, 0f, 1f);
 
     private boolean quitConfirmationFlag = false;
     private Timer quitConfirmationTimer = new Timer();
@@ -140,7 +137,9 @@ public class LobbyScreen implements Screen, InputProcessor {
         table.padTop(0);
 
         table.row().padTop(0);
-        table.add(gameIPLabel).padBottom(0).width(viewport.getWorldWidth() * 0.9f);
+        table.add(gameIPLabel)
+                .padBottom(0)
+                .width(viewport.getWorldWidth() * 0.9f);
 
         table.row();
         table.add(messageLabel)
@@ -148,7 +147,9 @@ public class LobbyScreen implements Screen, InputProcessor {
                 .width(viewport.getWorldWidth() * 0.9f);
 
         table.row();
-        table.add(playersListTable).align(Align.center).maxWidth(viewport.getWorldWidth() / 2f);
+        table.add(playersListTable)
+                .align(Align.center)
+                .maxWidth(viewport.getWorldWidth() / 4f);
 
         table.row().padTop(viewport.getWorldHeight() * 0.1f);
         table.add(startGameButton);
@@ -170,23 +171,39 @@ public class LobbyScreen implements Screen, InputProcessor {
     @Override
     public void show() {
         client = game.getClientConnection();
-        if(client.serverIP.equals("127.0.0.1")) {
-            gameIPLabel.setText("You are hosting, determining your IP...");
-            new Thread(() -> {
-                try {
-                    String thisMachineIP =
-                            new BufferedReader(
-                                    new InputStreamReader(
-                                            new URL("https://api.ipify.org").openStream())).readLine();
-                    gameIPLabel.setText("Hosting on [CYAN]" + thisMachineIP + "[]:[ORANGE]" + client.port + "[]");
-                } catch(IOException e) {
-                    gameIPLabel.setText("[YELLOW]Error: could not determine your IP[]");
+        if(client.connectedAsHost) {
+            gameIPLabel.setText("Hosting on port [ORANGE]" + client.port + "[], determining your IP...");
+
+            Net.HttpRequest httpGet = new Net.HttpRequest(Net.HttpMethods.GET);
+            httpGet.setUrl("https://api.ipify.org");
+            Gdx.net.sendHttpRequest(httpGet, new Net.HttpResponseListener() {
+                @Override
+                public void handleHttpResponse(Net.HttpResponse httpResponse) {
+                    gameIPLabel.setText("Hosting on [CYAN]" + httpResponse.getResultAsString() + "[]:[ORANGE]" + client.port + "[]");
+                    if(!game.successfullyOpenedServerPort()) {
+                        gameIPLabel.setText(gameIPLabel.getText()
+                                + "\nCouldn't open port [ORANGE]" + client.port + "[]. Players may not be able to join your game.");
+                    }
                 }
-                if(!game.successfullyOpenedServerPort()) {
-                    gameIPLabel.setText(gameIPLabel.getText()
-                            + "\nCouldn't open port [ORANGE]" + client.port + "[]. Players may not be able to join your game.");
+
+                @Override
+                public void failed(Throwable t) {
+                    gameIPLabel.setText("[YELLOW]Could not determine your IP[]; hosting on port [ORANGE]" + client.port + "[]");
+                    if(!game.successfullyOpenedServerPort()) {
+                        gameIPLabel.setText(gameIPLabel.getText()
+                                + "\nCouldn't open port [ORANGE]" + client.port + "[]. Players may not be able to join your game.");
+                    }
                 }
-            }).start();
+
+                @Override
+                public void cancelled() {
+                    gameIPLabel.setText("[YELLOW]Could not determine your IP[]; hosting on port [ORANGE]" + client.port + "[]");
+                    if(!game.successfullyOpenedServerPort()) {
+                        gameIPLabel.setText(gameIPLabel.getText()
+                                + "\nCouldn't open port [ORANGE]" + client.port + "[]. Players may not be able to join your game.");
+                    }
+                }
+            });
         }
         messageLabel.setText("");
         quitConfirmationFlag = false;
@@ -195,13 +212,13 @@ public class LobbyScreen implements Screen, InputProcessor {
 
         table.invalidate();
         playersListTable.invalidate();
-        updateUIFromGameState();
+        updateUiFromGameState();
     }
 
     @Override
     public void render(float delta) {
         if(gameState.update(client)) {
-            updateUIFromGameState();
+            updateUiFromGameState();
         }
         stage.act(delta);
 
@@ -212,8 +229,8 @@ public class LobbyScreen implements Screen, InputProcessor {
         stage.draw();
     }
 
-    private void updateUIFromGameState() {
-        float groupSpacing = viewport.getWorldWidth() / 12f;
+    private void updateUiFromGameState() {
+        float groupSpacing = viewport.getWorldWidth() / 24f;
 
         var pNumHeaderLabel = new Label("P#", labelStyle);
         var pNameHeaderLabel = new Label("NAME", labelStyle);
@@ -237,60 +254,67 @@ public class LobbyScreen implements Screen, InputProcessor {
         playersListTable.defaults();
 
         playersListTable.row().padBottom(viewport.getWorldHeight() / 20f);
-        playersListTable.add(pNumHeaderLabel);
-        playersListTable.add(pNameHeaderLabel).padLeft(groupSpacing);
+        playersListTable.add(pNumHeaderLabel).padRight(groupSpacing).align(Align.left);
+        playersListTable.add(pNameHeaderLabel);
         playersListTable.add(pCallRankHeaderLabel).padLeft(groupSpacing);
-        playersListTable.add(shufflePlayersButton).padLeft(groupSpacing).colspan(3);
+        if(gameState.thisPlayer != null && gameState.thisPlayer.isHost()) {
+            playersListTable.add(shufflePlayersButton).padLeft(groupSpacing).colspan(3);
+        }
 
         gameState.players.stream().filter(Objects::nonNull).forEach(p -> {
             var playerNumLabel = new Label("P" + p.getPlayerNum(), labelStyle);
             var playerNameLabel = new Label(p.getName(), labelStyle);
-            var pointsLabel = new Label(p.getCallRank().toAbbrevString() + "", labelStyle);
+            var playerRankLabel = new Label(p.getCallRank().toAbbrevString() + "", labelStyle);
 
-            var increasePointsButton = new TextButton("+", textButtonStyle);
-            var decreasePointsButton = new TextButton("-", textButtonStyle);
-            var resetPointsButton = new TextButton("R", textButtonStyle);
+            playerNameLabel.setAlignment(Align.left);
+            playerNameLabel.setAlignment(Align.center);
+            playerRankLabel.setAlignment(Align.center);
 
-            ((ClickListener)increasePointsButton.getListeners().get(0)).setButton(-1);
-            increasePointsButton.addListener(new ClickListener(-1) {
-                @Override
-                public void clicked(InputEvent event, float x, float y) {
-                    if(event.getButton() == Input.Buttons.LEFT) {
-                        requestPlayerRankChange(p.getPlayerNum(), 1);
-                    } else if(event.getButton() == Input.Buttons.RIGHT) {
-                        requestPlayerRankChange(p.getPlayerNum(), 10);
-                    }
-                }
-            });
-
-            ((ClickListener)decreasePointsButton.getListeners().get(0)).setButton(-1);
-            decreasePointsButton.addListener(new ClickListener(-1) {
-                @Override
-                public void clicked(InputEvent event, float x, float y) {
-                    if(event.getButton() == Input.Buttons.LEFT) {
-                        requestPlayerRankChange(p.getPlayerNum(), -1);
-                    } else if(event.getButton() == Input.Buttons.RIGHT) {
-                        requestPlayerRankChange(p.getPlayerNum(), -10);
-                    }
-                }
-            });
-
-            resetPointsButton.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, Actor actor) {
-                    requestPlayerRankChangeReset(p.getPlayerNum());
-                }
-            });
 
             if(playerNameLabel.getText().length() > MAX_NAME_CHARS) {
                 playerNameLabel.setText(playerNameLabel.getText().substring(0, MAX_NAME_CHARS) + "...");
             }
 
             playersListTable.row().padBottom(viewport.getWorldHeight() * 0.01f);
-            playersListTable.add(playerNumLabel).padRight(groupSpacing);
+            playersListTable.add(playerNumLabel).padRight(groupSpacing).align(Align.left);
             playersListTable.add(playerNameLabel);
-            playersListTable.add(pointsLabel).padLeft(groupSpacing);
+            playersListTable.add(playerRankLabel).padLeft(groupSpacing);
             if(gameState.thisPlayer != null && gameState.thisPlayer.isHost()) {
+                var increasePointsButton = new TextButton("+", textButtonStyle);
+                var decreasePointsButton = new TextButton("-", textButtonStyle);
+                var resetPointsButton = new TextButton("R", textButtonStyle);
+
+                ((ClickListener)increasePointsButton.getListeners().get(0)).setButton(-1);
+                increasePointsButton.addListener(new ClickListener(-1) {
+                    @Override
+                    public void clicked(InputEvent event, float x, float y) {
+                        if(event.getButton() == Input.Buttons.LEFT) {
+                            requestPlayerRankChange(p.getPlayerNum(), 1);
+                        } else if(event.getButton() == Input.Buttons.RIGHT) {
+                            requestPlayerRankChange(p.getPlayerNum(), 2);
+                        }
+                    }
+                });
+
+                ((ClickListener)decreasePointsButton.getListeners().get(0)).setButton(-1);
+                decreasePointsButton.addListener(new ClickListener(-1) {
+                    @Override
+                    public void clicked(InputEvent event, float x, float y) {
+                        if(event.getButton() == Input.Buttons.LEFT) {
+                            requestPlayerRankChange(p.getPlayerNum(), -1);
+                        } else if(event.getButton() == Input.Buttons.RIGHT) {
+                            requestPlayerRankChange(p.getPlayerNum(), -2);
+                        }
+                    }
+                });
+
+                resetPointsButton.addListener(new ChangeListener() {
+                    @Override
+                    public void changed(ChangeEvent event, Actor actor) {
+                        requestPlayerRankChangeReset(p.getPlayerNum());
+                    }
+                });
+
                 playersListTable.add(decreasePointsButton)
                         .padLeft(viewport.getWorldWidth() * 0.05f)
                         .minWidth(viewport.getWorldWidth() * 0.05f);
@@ -303,12 +327,12 @@ public class LobbyScreen implements Screen, InputProcessor {
             }
 
             if(p.isHost()) {
-                playerNumLabel.setColor(hostColor);
-                playerNameLabel.setColor(hostColor);
-                pointsLabel.setColor(hostColor);
+                playerNumLabel.getText().append(" [HOST]");
             }
             if(gameState.thisPlayer != null && p.getPlayerNum() == gameState.thisPlayer.getPlayerNum()) {
-                playerNumLabel.getText().insert(0, "->");
+                playerNumLabel.setColor(thisPlayerColor);
+                playerNameLabel.setColor(thisPlayerColor);
+                playerRankLabel.setColor(thisPlayerColor);
             }
         });
 
@@ -327,11 +351,15 @@ public class LobbyScreen implements Screen, InputProcessor {
             messageLabel.setText(gameState.errorMessage);
         }
 
-        if(gameState.thisPlayer != null && !gameState.thisPlayer.isHost()) {
-            gameIPLabel.setText("Connected to [YELLOW]"
-                    + gameState.hostPlayer.getName()
-                    + (gameState.hostPlayer.getName().charAt(gameState.hostPlayer.getName().length() - 1) == 's' ? "'" : "'s")
-                    + "[] lobby hosted on [CYAN]" + client.serverIP + "[]:[ORANGE]" + client.port);
+        if(!client.connectedAsHost) {
+            String hostPlayerName = (gameState.hostPlayer == null)
+                    ? "???"
+                    : gameState.hostPlayer.getName() +
+                    ((gameState.hostPlayer.getName().charAt(gameState.hostPlayer.getName().length() - 1) == 's') ? "'" : "'s");
+
+            gameIPLabel.setText("Connected to " +
+                    hostPlayerName +
+                    " lobby hosted on [CYAN]" + client.serverIP + "[]:[ORANGE]" + client.port);
         }
     }
 
@@ -370,7 +398,7 @@ public class LobbyScreen implements Screen, InputProcessor {
         viewport.update(width, height, true);
         table.invalidate();
         playersListTable.invalidate();
-        updateUIFromGameState();
+        updateUiFromGameState();
     }
 
     @Override

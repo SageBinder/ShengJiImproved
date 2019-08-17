@@ -16,6 +16,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class ClientConnection extends Thread {
     public final int port;
     public final String serverIP;
+    public final boolean connectedAsHost;
     private final ShengJiGame game;
     private final String playerName;
 
@@ -27,9 +28,10 @@ public class ClientConnection extends Thread {
 
     private volatile boolean quit = false;
 
-    public ClientConnection(String serverIP, int port, String playerName, ShengJiGame game) {
+    public ClientConnection(String serverIP, int port, String playerName, boolean connectedAsHost, ShengJiGame game) {
         this.port = port;
         this.serverIP = serverIP;
+        this.connectedAsHost = connectedAsHost;
         this.game = game;
         this.playerName = playerName;
 
