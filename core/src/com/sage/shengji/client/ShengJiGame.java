@@ -37,11 +37,9 @@ public class ShengJiGame extends Game {
             playgroundScreen,
             uiBuilderScreen;
 
-    private Timer titleTimer;
-
     @Override
     public void create() {
-        Gdx.graphics.setTitle("♤♥升級♧♦");
+        Gdx.graphics.setTitle("升級");
 
         backgroundTexture = new Texture(Gdx.files.internal("background.jpg"));
 

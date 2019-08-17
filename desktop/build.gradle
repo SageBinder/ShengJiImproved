@@ -1,7 +1,9 @@
 apply plugin: "java"
 
+def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+
 compileJava.options.fork = true
-compileJava.options.forkOptions.executable = "C:\\Program Files\\Java\\jdk-11.0.1\\bin\\javac.exe"
+compileJava.options.forkOptions.executable = "C:\\Program Files\\Java\\jdk-12\\bin\\javac.exe"
 sourceSets.main.java.srcDirs = [ "src/" ]
 
 project.ext.mainClassName = "com.sage.shengji.desktop.DesktopLauncher"
@@ -42,6 +44,65 @@ eclipse {
         name = appName + "-desktop"
         linkedResource name: 'assets', type: '2', location: 'PARENT-1-PROJECT_LOC/core/assets'
     }
+}
+
+// creates a slim JDK runtime for distribution
+task createRuntime(type: Exec) {
+    doFirst() {
+        project.delete("${buildDir}/runtime")
+    }
+    String runtimePath = "${buildDir}/runtime"
+
+    workingDir project.projectDir
+    commandLine = [
+            "${project.projectDir}/jpackage/bin/jlink",
+            '-p', "${project.projectDir}/jpackage/jmods",
+            '--add-modules', 'java.base,java.desktop,jdk.unsupported',
+            '--strip-debug',
+            '--no-header-files',
+            '--no-man-pages',
+            '--strip-native-commands',
+            "--vm=server",
+            "--compress=2",
+            '--output', runtimePath
+    ]
+}
+
+// creates application bundle (executable + runtime)
+task jpackage(type: Exec, dependsOn: dist) {
+    doFirst() {
+        project.delete("${buildDir}/distribution/$project.appName")
+    }
+    dependsOn createRuntime
+    workingDir project.projectDir
+    def commands = [
+            "${project.projectDir}/jpackage/bin/jpackage",
+            '--output', "${buildDir}/distribution",
+            '--input', "${buildDir}/libs",
+            '--name', project.appName,
+            '--main-class', project.mainClassName,
+            '--main-jar', jar.archiveFile.get().asFile.getName(),
+            '--runtime-image', "${buildDir}/runtime"
+    ]
+
+    if (osName.contains('windows')) {
+        commands << '--icon'
+        commands << "${project.projectDir}/icon.ico"
+        commands << '--java-options'
+        commands << "-splash:splash.png"
+    } else if (osName.contains('linux')) {
+        commands << '--icon'
+        commands << "${project.projectDir}/icon.png"
+        commands << '--java-options'
+        commands << "-splash:splash.png"
+    } else if (osName.contains('mac')) {
+        commands << '--icon'
+        commands << "${project.projectDir}/icon.icns"
+        commands << '--java-options'
+        commands << "-XstartOnFirstThread"
+    }
+
+    commandLine = commands
 }
 
 task afterEclipseImport(description: "Post processing after project generation", group: "IDE") {
